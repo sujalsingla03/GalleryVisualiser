@@ -4,13 +4,14 @@ import {
   WebGLRenderer,
   Color,
   ACESFilmicToneMapping,
-  PCFSoftShadowMap,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { TAARenderPass } from 'three/examples/jsm/postprocessing/TAARenderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import type { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
+import { createOutlinePass } from './passes/outlinePassFactory';
 
 export interface SceneBundle {
   scene: Scene;
@@ -19,6 +20,7 @@ export interface SceneBundle {
   composer: EffectComposer;
   smaa: SMAAPass;
   taa: TAARenderPass;
+  outline: OutlinePass;
   resize: (w: number, h: number) => void;
   dispose: () => void;
 }
@@ -34,18 +36,18 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = false;
-  renderer.shadowMap.type = PCFSoftShadowMap;
 
   const composer = new EffectComposer(renderer);
-  const renderPass = new RenderPass(scene, camera);
-  composer.addPass(renderPass);
+  composer.addPass(new RenderPass(scene, camera));
 
   const taa = new TAARenderPass(scene, camera);
   taa.sampleLevel = 2;
   taa.unbiased = true;
   taa.enabled = true;
   composer.addPass(taa);
+
+  const outline = createOutlinePass(scene, camera, window.innerWidth, window.innerHeight);
+  composer.addPass(outline);
 
   const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
   composer.addPass(smaa);
@@ -58,6 +60,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
     renderer.setSize(w, h, false);
     composer.setSize(w, h);
     smaa.setSize(w, h);
+    outline.setSize(w, h);
   }
 
   function dispose() {
@@ -65,5 +68,5 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
     renderer.dispose();
   }
 
-  return { scene, camera, renderer, composer, smaa, taa, resize, dispose };
+  return { scene, camera, renderer, composer, smaa, taa, outline, resize, dispose };
 }
