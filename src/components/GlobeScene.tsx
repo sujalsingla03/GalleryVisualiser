@@ -11,6 +11,7 @@ import { createStarField } from '../three/createStarField';
 import { createPhotoNode } from '../three/createPhotoNode';
 import { setupControls } from '../three/controls';
 import { latLngToVec3 } from '../lib/latLngToVec3';
+import { GlobeHud } from './GlobeHud';
 
 const GLOBE_RADIUS = 1;
 
@@ -91,9 +92,12 @@ export function GlobeScene() {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ width: '100vw', height: '100vh', display: 'block' }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        style={{ width: '100vw', height: '100vh', display: 'block' }}
+      />
+      <GlobeHud />
+    </>
   );
 }
