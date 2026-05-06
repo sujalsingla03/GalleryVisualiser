@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { ChangeEvent, DragEvent } from 'react';
+import type { ChangeEvent } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
@@ -39,7 +39,7 @@ export function LandingScreen() {
   );
 
   const onDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
+    (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
       const items = e.dataTransfer.files;
