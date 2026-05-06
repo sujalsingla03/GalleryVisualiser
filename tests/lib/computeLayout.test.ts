@@ -30,7 +30,7 @@ describe('computeLayout', () => {
   });
 
   it('produces a roughly centered scatter (mean near 0 for x, y, z)', () => {
-    const result = computeLayout(2000, { spread: 1, depthRatio: 0.5 });
+    const result = computeLayout(2000, { spread: 1, depthRatio: 0.5, minXyDistance: 0 });
     const meanX = result.reduce((acc, s) => acc + s.position.x, 0) / result.length;
     const meanY = result.reduce((acc, s) => acc + s.position.y, 0) / result.length;
     const meanZ = result.reduce((acc, s) => acc + s.position.z, 0) / result.length;
@@ -40,8 +40,7 @@ describe('computeLayout', () => {
   });
 
   it('depthRatio scales the z stddev relative to xy', () => {
-    // With depthRatio = 0.5 and spread = 2, expected stddev: x/y ≈ 2, z ≈ 1.
-    const result = computeLayout(4000, { spread: 2, depthRatio: 0.5 });
+    const result = computeLayout(4000, { spread: 2, depthRatio: 0.5, minXyDistance: 0 });
     const stddev = (xs: number[]) => {
       const mean = xs.reduce((a, x) => a + x, 0) / xs.length;
       return Math.sqrt(xs.reduce((a, x) => a + (x - mean) ** 2, 0) / xs.length);
@@ -52,6 +51,20 @@ describe('computeLayout', () => {
     expect(sx).toBeLessThan(2.3);
     expect(sz).toBeGreaterThan(0.85);
     expect(sz).toBeLessThan(1.15);
+  });
+
+  it('respects minXyDistance when feasible (low density layout)', () => {
+    // Sparse: spread 5, only 20 photos, plenty of room for min distance 1.5.
+    const min = 1.5;
+    const result = computeLayout(20, { spread: 5, minXyDistance: min, maxPlacementAttempts: 200 });
+    for (let i = 0; i < result.length; i++) {
+      for (let j = i + 1; j < result.length; j++) {
+        const dx = result[i].position.x - result[j].position.x;
+        const dy = result[i].position.y - result[j].position.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        expect(d).toBeGreaterThanOrEqual(min - 1e-9);
+      }
+    }
   });
 
   it('is deterministic with a seeded rng', () => {

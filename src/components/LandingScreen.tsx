@@ -5,7 +5,7 @@ import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { loadPhoto } from '../lib/loadPhoto';
 
-const ACCEPTED = /\.(jpe?g)$/i;
+const ACCEPTED = /\.(jpe?g|png|webp)$/i;
 
 export function LandingScreen() {
   const setView = useViewStore((s) => s.setView);
@@ -102,7 +102,7 @@ export function LandingScreen() {
           <input
             type="file"
             multiple
-            accept="image/jpeg,.jpg,.jpeg"
+            accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
             onChange={onPick}
             style={{ display: 'none' }}
           />
@@ -122,7 +122,7 @@ export function LandingScreen() {
               lineHeight: 1.5,
             }}
           >
-            JPG/JPEG only for now. Click to choose files. Works entirely in your browser —
+            JPG, PNG, and WebP. Click to choose files. Works entirely in your browser —
             your photos never leave your device.
           </div>
         </label>

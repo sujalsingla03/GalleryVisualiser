@@ -1,8 +1,10 @@
 export interface LayoutOptions {
-  spread?: number;       // standard deviation of the Gaussian scatter on x/y (in scene units)
-  depthRatio?: number;   // z spread as a fraction of `spread` (1.0 = isotropic cloud, 0 = flat plane)
-  scaleMin?: number;     // minimum random scale per card
-  scaleMax?: number;     // maximum random scale per card
+  spread?: number;          // standard deviation of the Gaussian scatter on x/y
+  depthRatio?: number;      // z spread as a fraction of `spread`
+  scaleMin?: number;        // minimum random scale per card
+  scaleMax?: number;        // maximum random scale per card
+  minXyDistance?: number;   // enforce a minimum xy distance between any two photos
+  maxPlacementAttempts?: number; // bail-out for rejection sampling
 }
 
 export interface PhotoSlot {
@@ -11,7 +13,6 @@ export interface PhotoSlot {
   scale: number;
 }
 
-// Box-Muller transform → standard normal (mean 0, stddev 1)
 function gaussian(rng: () => number): number {
   const u = 1 - rng();
   const v = rng();
@@ -29,11 +30,30 @@ export function computeLayout(
   const depthRatio = options.depthRatio ?? 0.6;
   const scaleMin = options.scaleMin ?? 0.5;
   const scaleMax = options.scaleMax ?? 2.0;
+  const minXyDistance = options.minXyDistance ?? 1.2;
+  const maxAttempts = options.maxPlacementAttempts ?? 50;
 
+  const minXyDistSq = minXyDistance * minXyDistance;
   const slots: PhotoSlot[] = [];
+
   for (let i = 0; i < count; i++) {
-    const x = gaussian(rng) * spread;
-    const y = gaussian(rng) * spread;
+    let x = 0;
+    let y = 0;
+    let placed = false;
+    for (let attempt = 0; attempt < maxAttempts && !placed; attempt++) {
+      x = gaussian(rng) * spread;
+      y = gaussian(rng) * spread;
+      let conflicts = false;
+      for (let j = 0; j < slots.length; j++) {
+        const dx = slots[j].position.x - x;
+        const dy = slots[j].position.y - y;
+        if (dx * dx + dy * dy < minXyDistSq) {
+          conflicts = true;
+          break;
+        }
+      }
+      if (!conflicts) placed = true;
+    }
     const z = gaussian(rng) * spread * depthRatio;
     const scale = scaleMin + rng() * (scaleMax - scaleMin);
     slots.push({
@@ -42,5 +62,6 @@ export function computeLayout(
       scale,
     });
   }
+
   return slots;
 }

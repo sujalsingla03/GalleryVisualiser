@@ -14,26 +14,23 @@ export function setupControls(camera: Camera, dom: HTMLElement): ControlsBundle 
   controls.enableDamping = true;
   controls.dampingFactor = 0.18;
 
-  controls.enableRotate = false; // SOOT-style: drag pans, never rotates
+  controls.enableRotate = false;
   controls.enablePan = true;
-  controls.enableZoom = true;
-  controls.zoomToCursor = true;
-  controls.zoomSpeed = 6.0;
+  controls.enableZoom = false; // smooth zoom is handled in SpaceScene
   controls.panSpeed = 1.0;
   controls.screenSpacePanning = true;
 
   controls.minDistance = 0.01;
   controls.maxDistance = 5000;
 
-  // Drag with the primary mouse button = pan; single-finger touch = pan
   controls.mouseButtons = {
     LEFT: MOUSE.PAN,
-    MIDDLE: MOUSE.DOLLY,
+    MIDDLE: MOUSE.PAN,
     RIGHT: MOUSE.PAN,
   };
   controls.touches = {
     ONE: TOUCH.PAN,
-    TWO: TOUCH.DOLLY_PAN,
+    TWO: TOUCH.PAN,
   };
 
   return {

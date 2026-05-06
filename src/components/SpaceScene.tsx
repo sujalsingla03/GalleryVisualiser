@@ -3,6 +3,7 @@ import {
   Group,
   Raycaster,
   Vector2,
+  Vector3,
   type Object3D,
   type Intersection,
 } from 'three';
@@ -11,6 +12,12 @@ import { createPhotoCard, type PhotoCard } from '../three/createPhotoCard';
 import { setupControls } from '../three/orbitControlsFactory';
 import { computeLayout } from '../lib/computeLayout';
 import { usePhotoStore } from '../store/photoStore';
+
+const ZOOM_STEP = 0.92;          // each scroll tick multiplies distance by this (or its inverse)
+const ZOOM_LERP = 0.18;          // smoothing factor — closer to 1 = snappier, closer to 0 = lazier
+const MIN_DISTANCE = 0.05;
+const MAX_DISTANCE = 5000;
+const TARGET_LERP = 0.18;        // smoothing for the controls.target shift
 
 export function SpaceScene() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,7 +47,6 @@ export function SpaceScene() {
       }
     }
 
-    // Camera: face the scatter from a generous distance so perspective is gentle
     if (cards.length > 0) {
       const spread = Math.max(2.5, Math.cbrt(photos.length) * 1.4);
       const distance = Math.max(8, spread * 5.5);
@@ -51,6 +57,35 @@ export function SpaceScene() {
     const controlsBundle = setupControls(camera, canvas);
     controlsBundle.controls.target.set(0, 0, 0);
     controlsBundle.controls.update();
+
+    // ---- Smooth zoom state ----
+    let targetDistance = camera.position.distanceTo(controlsBundle.controls.target);
+    const targetTarget = controlsBundle.controls.target.clone();
+    const camDir = new Vector3();
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const sign = Math.sign(e.deltaY);
+      if (sign === 0) return;
+      // Scale based on |deltaY| so trackpad continuous scroll doesn't over-accumulate
+      const magnitude = Math.min(Math.abs(e.deltaY) / 100, 1.5);
+      const factor = sign > 0 ? 1 / Math.pow(ZOOM_STEP, magnitude) : Math.pow(ZOOM_STEP, magnitude);
+      targetDistance = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE, targetDistance * factor));
+
+      // Zoom-to-cursor: shift the orbit target slightly toward the world point under the cursor.
+      // We project the cursor onto the plane through the current target perpendicular to the view direction.
+      camera.getWorldDirection(camDir);
+      const origin = new Vector3().setFromMatrixPosition(camera.matrixWorld);
+      const cursorRay = new Vector3(pointer.x, pointer.y, 0.5).unproject(camera).sub(origin).normalize();
+      const planeDistance = controlsBundle.controls.target.clone().sub(origin).dot(camDir) / cursorRay.dot(camDir);
+      if (Number.isFinite(planeDistance) && planeDistance > 0) {
+        const focal = origin.clone().add(cursorRay.multiplyScalar(planeDistance));
+        // Stronger pull on zoom-in, lighter on zoom-out
+        const pull = sign < 0 ? 0.18 : 0.0;
+        targetTarget.lerp(focal, pull);
+      }
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
 
     const targets: Object3D[] = cards.map((c) => c.mesh);
 
@@ -69,7 +104,6 @@ export function SpaceScene() {
     canvas.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('pointerleave', onPointerLeave);
 
-    // Distinguish a true click from a pan-drag: only register click if pointer didn't move much.
     let downX = 0;
     let downY = 0;
     const onPointerDown = (e: PointerEvent) => {
@@ -79,7 +113,7 @@ export function SpaceScene() {
     const onPointerUp = (e: PointerEvent) => {
       const dx = e.clientX - downX;
       const dy = e.clientY - downY;
-      if (dx * dx + dy * dy > 16) return; // ignore drags
+      if (dx * dx + dy * dy > 16) return;
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObjects(targets, false);
       if (hits.length > 0) {
@@ -97,9 +131,17 @@ export function SpaceScene() {
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
-      controlsBundle.update();
 
-      // Billboard each card to face the camera
+      // Smooth zoom: lerp camera distance and target.
+      controlsBundle.controls.target.lerp(targetTarget, TARGET_LERP);
+      controlsBundle.update();
+      const currentDistance = camera.position.distanceTo(controlsBundle.controls.target);
+      const newDistance = currentDistance + (targetDistance - currentDistance) * ZOOM_LERP;
+      if (Math.abs(newDistance - currentDistance) > 1e-4) {
+        const dir = camera.position.clone().sub(controlsBundle.controls.target).normalize();
+        camera.position.copy(controlsBundle.controls.target).add(dir.multiplyScalar(newDistance));
+      }
+
       for (const c of cards) {
         c.group.quaternion.copy(camera.quaternion);
       }
@@ -123,6 +165,7 @@ export function SpaceScene() {
       canvas.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('wheel', onWheel);
       controlsBundle.dispose();
       cards.forEach((c) => c.dispose());
       bundle.dispose();
