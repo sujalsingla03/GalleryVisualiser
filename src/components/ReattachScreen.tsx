@@ -67,7 +67,7 @@ export function ReattachScreen() {
         return;
       }
 
-      setPhotos(matchedPhotos);
+      setPhotos(matchedPhotos, matchedSlots.map(() => ''));
       setLayout(matchedSlots);
       setView('space');
     },

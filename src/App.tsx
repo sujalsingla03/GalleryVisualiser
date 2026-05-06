@@ -5,6 +5,8 @@ import { ProcessingScreen } from './components/ProcessingScreen';
 import { SpaceScene } from './components/SpaceScene';
 import { SpaceHud } from './components/SpaceHud';
 import { PhotoLightbox } from './components/PhotoLightbox';
+import { SpacesList } from './components/SpacesList';
+import { ReattachScreen } from './components/ReattachScreen';
 import { useViewStore } from './store/viewStore';
 
 export default function App() {
@@ -16,6 +18,8 @@ export default function App() {
       <AuthGate>
         {view === 'landing' && <LandingScreen />}
         {view === 'processing' && <ProcessingScreen />}
+        {view === 'spaces-list' && <SpacesList />}
+        {view === 'reattach' && <ReattachScreen />}
         {view === 'space' && (
           <>
             <SpaceScene />

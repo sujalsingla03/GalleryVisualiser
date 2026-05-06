@@ -3,7 +3,7 @@ import type { ChangeEvent, DragEvent } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
-import { loadPhoto } from '../lib/loadPhoto';
+import { loadPhotoWithHash } from '../lib/loadPhoto';
 
 const ACCEPTED = /\.(jpe?g|png|webp)$/i;
 
@@ -21,18 +21,20 @@ export function LandingScreen() {
       setProgress(0, jpgs.length);
       setView('processing');
 
-      const out: Awaited<ReturnType<typeof loadPhoto>>[] = [];
+      const photos: Awaited<ReturnType<typeof loadPhotoWithHash>>['photo'][] = [];
+      const hashes: string[] = [];
       for (let i = 0; i < jpgs.length; i++) {
         try {
-          const photo = await loadPhoto(jpgs[i]);
-          out.push(photo);
+          const { photo, contentHash } = await loadPhotoWithHash(jpgs[i]);
+          photos.push(photo);
+          hashes.push(contentHash);
         } catch (err) {
           console.warn(`Skipping ${jpgs[i].name}:`, err);
         }
         setProgress(i + 1, jpgs.length);
       }
 
-      setPhotos(out);
+      setPhotos(photos, hashes);
       setView('space');
     },
     [setView, setProgress, setPhotos],

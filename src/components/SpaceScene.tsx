@@ -41,6 +41,8 @@ export function SpaceScene() {
       const slots = layoutOverride && layoutOverride.length === photos.length
         ? layoutOverride
         : computeLayout(photos.length);
+      // Stash the live layout so SaveSpaceModal can persist it.
+      usePhotoStore.getState().setLayout(slots);
       for (let i = 0; i < photos.length; i++) {
         const slot = slots[i];
         const card = createPhotoCard(photos[i], slot.scale);
