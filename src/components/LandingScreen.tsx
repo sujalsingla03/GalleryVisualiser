@@ -131,22 +131,6 @@ export function LandingScreen() {
           </div>
         </label>
       </FrostPanel>
-
-      <button
-        onClick={() => useViewStore.getState().setView('spaces-list')}
-        style={{
-          background: 'transparent',
-          color: 'var(--text-secondary)',
-          border: 'none',
-          fontSize: 'var(--font-size-md)',
-          cursor: 'pointer',
-          textDecoration: 'underline',
-          letterSpacing: '0.02em',
-          marginTop: 4,
-        }}
-      >
-        Or open a saved space →
-      </button>
     </div>
   );
 }

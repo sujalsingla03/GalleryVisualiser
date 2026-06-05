@@ -1,9 +1,7 @@
-import { useState } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { useHandStore } from '../store/handStore';
-import { SaveSpaceModal } from './SaveSpaceModal';
 
 export function SpaceHud() {
   const setView = useViewStore((s) => s.setView);
@@ -11,17 +9,12 @@ export function SpaceHud() {
   const photos = usePhotoStore((s) => s.photos);
   const handEnabled = useHandStore((s) => s.enabled);
   const toggleHand = useHandStore((s) => s.toggle);
-  const hashes = usePhotoStore((s) => s.hashes);
   const clear = usePhotoStore((s) => s.clear);
-  const [showSave, setShowSave] = useState(false);
 
   const onClear = () => {
     clear();
     setView('landing');
   };
-
-  // Only allow Save when this space was loaded from local files (has hashes).
-  const canSave = photos.length > 0 && hashes.length === photos.length && hashes.every((h) => h);
 
   return (
     <>
@@ -81,24 +74,6 @@ export function SpaceHud() {
             🖐 Hands
           </button>
         </FrostPanel>
-        {canSave && (
-          <FrostPanel style={{ padding: '8px 14px' }}>
-            <button
-              onClick={() => setShowSave(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--color-accent)',
-                fontSize: 'var(--font-size-md)',
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
-                fontWeight: 600,
-              }}
-            >
-              ⬛ Save space
-            </button>
-          </FrostPanel>
-        )}
         <FrostPanel style={{ padding: '8px 14px' }}>
           <span
             style={{
@@ -111,7 +86,6 @@ export function SpaceHud() {
           </span>
         </FrostPanel>
       </div>
-      {showSave && <SaveSpaceModal onClose={() => setShowSave(false)} />}
     </>
   );
 }

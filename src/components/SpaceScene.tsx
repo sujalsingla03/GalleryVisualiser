@@ -45,7 +45,7 @@ export function SpaceScene() {
     if (photos.length > 0) {
       slots =
         slots && slots.length === photos.length ? slots : computeLayout(photos.length);
-      // Stash the live layout so SaveSpaceModal (and drop-to-place) can persist it.
+      // Stash the live layout so drop-to-place repositioning sticks for the session.
       usePhotoStore.getState().setLayout(slots);
       for (let i = 0; i < photos.length; i++) {
         const slot = slots[i];
