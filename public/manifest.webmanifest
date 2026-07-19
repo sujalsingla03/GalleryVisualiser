@@ -1,6 +1,6 @@
 {
-  "name": "PinViz",
-  "short_name": "PinViz",
+  "name": "GallerySphere",
+  "short_name": "GallerySphere",
   "description": "Private 3D AR photo gallery — photos never leave your device.",
   "start_url": "/",
   "display": "standalone",

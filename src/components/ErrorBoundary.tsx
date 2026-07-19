@@ -18,7 +18,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(`[PinViz] ${this.props.label ?? 'ErrorBoundary'}`, error, info.componentStack);
+    console.error(`[GallerySphere] ${this.props.label ?? 'ErrorBoundary'}`, error, info.componentStack);
   }
 
   render() {
@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-fallback" role="alert">
           <h2>Something went wrong rendering your space</h2>
-          <p>WebGL or a UI error interrupted PinViz. Your photos were only in memory for this session.</p>
+          <p>WebGL or a UI error interrupted GallerySphere. Your photos were only in memory for this session.</p>
           <button type="button" className="landing-action primary" onClick={() => window.location.reload()}>
             Reload
           </button>

@@ -56,7 +56,7 @@ export function SpaceScene() {
     const { scene, camera, composer, outline, resize, renderer, setPixelRatioCap } = bundle;
 
     registerSnapshot(() => {
-      downloadCanvasPng(renderer.domElement, `pinviz-${Date.now()}.png`);
+      downloadCanvasPng(renderer.domElement, `GallerySphere-${Date.now()}.png`);
     });
 
     const cardsRoot = new Group();
@@ -198,8 +198,8 @@ export function SpaceScene() {
       markInteract();
       performPan(detail.dx, detail.dy);
     };
-    window.addEventListener('pinviz-zoom', onKeyZoom);
-    window.addEventListener('pinviz-pan', onKeyPan);
+    window.addEventListener('GallerySphere-zoom', onKeyZoom);
+    window.addEventListener('GallerySphere-pan', onKeyPan);
 
     // Mobile: two-finger pinch zoom (OrbitControls zoom is disabled for custom smoothing).
     let pinchDist = 0;
@@ -644,8 +644,8 @@ export function SpaceScene() {
       canvas.removeEventListener('touchcancel', onTouchEnd);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
-      window.removeEventListener('pinviz-zoom', onKeyZoom);
-      window.removeEventListener('pinviz-pan', onKeyPan);
+      window.removeEventListener('GallerySphere-zoom', onKeyZoom);
+      window.removeEventListener('GallerySphere-pan', onKeyPan);
       unsubFrames();
       unsubReset();
       unsubLayout();

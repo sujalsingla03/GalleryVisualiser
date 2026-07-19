@@ -170,7 +170,7 @@ export function LandingScreen() {
   return (
     <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-5 sm:gap-8 px-4 sm:px-6">
       <div className="flex flex-col items-center gap-2 sm:gap-3 text-center max-w-2xl">
-        <p className="landing-brand">PinViz</p>
+        <p className="landing-brand">GallerySphere</p>
         <p className="landing-tagline">
           Your photos in a private 3D gallery — works great on phone. Nothing is uploaded.
         </p>

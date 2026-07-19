@@ -6,7 +6,7 @@ export function SvgFilters() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <filter id="pinviz-tooltip-outline">
+        <filter id="GallerySphere-tooltip-outline">
           <feDropShadow
             dx="0"
             dy="0"

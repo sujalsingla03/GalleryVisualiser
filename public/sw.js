@@ -1,5 +1,5 @@
-/* PinViz app-shell service worker — caches static assets only (not user photos). */
-const CACHE = 'pinviz-shell-v1';
+/* GallerySphere app-shell service worker — caches static assets only (not user photos). */
+const CACHE = 'GallerySphere-shell-v1';
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {

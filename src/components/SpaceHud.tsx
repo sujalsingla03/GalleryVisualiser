@@ -107,12 +107,12 @@ export function SpaceHud() {
       }
       if (key === '+' || key === '=') {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent('pinviz-zoom', { detail: -80 }));
+        window.dispatchEvent(new CustomEvent('GallerySphere-zoom', { detail: -80 }));
         return;
       }
       if (key === '-' || key === '_') {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent('pinviz-zoom', { detail: 80 }));
+        window.dispatchEvent(new CustomEvent('GallerySphere-zoom', { detail: 80 }));
         return;
       }
 
@@ -129,7 +129,7 @@ export function SpaceHud() {
       const delta = panMap[key] ?? panMap[lower];
       if (delta) {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent('pinviz-pan', { detail: { dx: delta[0], dy: delta[1] } }));
+        window.dispatchEvent(new CustomEvent('GallerySphere-pan', { detail: { dx: delta[0], dy: delta[1] } }));
       }
     };
     window.addEventListener('keydown', onKey);

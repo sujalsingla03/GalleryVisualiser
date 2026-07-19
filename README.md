@@ -1,4 +1,4 @@
-# PinViz
+# GallerySphere
 
 Private 3D / AR photo gallery that runs entirely in the browser. Photos never leave your device.
 

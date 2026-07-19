@@ -2,7 +2,7 @@
 
 import type { PhotoSlot } from './computeLayout';
 
-const DB_NAME = 'pinviz-session';
+const DB_NAME = 'GallerySphere-session';
 const DB_VERSION = 1;
 const STORE = 'spaces';
 const KEY = 'latest';

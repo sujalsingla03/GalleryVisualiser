@@ -30,7 +30,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   const lowPower = preferLowPowerMedia();
   if (import.meta.env.DEV) {
     console.info(
-      `[PinViz] low-power=${lowPower} dprCap=${lowPower ? 1.5 : 2} smaa=${!lowPower} outline=${!lowPower}`,
+      `[GallerySphere] low-power=${lowPower} dprCap=${lowPower ? 1.5 : 2} smaa=${!lowPower} outline=${!lowPower}`,
     );
   }
 

@@ -1,4 +1,4 @@
-# PinViz MediaPipe assets
+# GallerySphere MediaPipe assets
 
 Same-origin hand-tracking assets. Populated by `npm run sync:mediapipe` (also runs on `postinstall`):
 

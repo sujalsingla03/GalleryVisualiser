@@ -1,5 +1,5 @@
 /** Capture the current WebGL canvas as a PNG download (local only). */
-export function downloadCanvasPng(canvas: HTMLCanvasElement, filename = 'pinviz-snapshot.png'): void {
+export function downloadCanvasPng(canvas: HTMLCanvasElement, filename = 'GallerySphere-snapshot.png'): void {
   const url = canvas.toDataURL('image/png');
   const a = document.createElement('a');
   a.href = url;

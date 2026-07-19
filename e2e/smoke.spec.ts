@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('landing → ingest → space renders without crash', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText('PinViz')).toBeVisible();
+  await expect(page.getByText('GallerySphere')).toBeVisible();
 
   // Create a tiny PNG in-memory via page and drop isn't easy; use file input.
   const fixture = path.join(__dirname, 'fixtures', 'sample.png');

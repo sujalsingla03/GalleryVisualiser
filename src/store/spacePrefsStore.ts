@@ -2,9 +2,9 @@ import { create } from 'zustand';
 import type { LayoutMode } from '../lib/computeLayout';
 import { prefersReducedMotion } from '../lib/motion';
 
-const TIPS_KEY = 'pinviz.tipsDismissed';
-const THEME_KEY = 'pinviz.theme';
-const REDUCED_MOTION_KEY = 'pinviz.reducedMotion';
+const TIPS_KEY = 'GallerySphere.tipsDismissed';
+const THEME_KEY = 'GallerySphere.theme';
+const REDUCED_MOTION_KEY = 'GallerySphere.reducedMotion';
 
 export type ThemeId = 'teal' | 'gallery' | 'night';
 export type QualityTier = 'high' | 'balanced' | 'low';
