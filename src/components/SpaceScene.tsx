@@ -16,12 +16,18 @@ import { usePhotoStore } from '../store/photoStore';
 import { handTracker } from '../lib/handTracking';
 import { GestureRecognizer, type FrameSnapshot } from '../lib/gestureRecognizer';
 import { useViewStore } from '../store/viewStore';
+import { useSpacePrefsStore } from '../store/spacePrefsStore';
+import { isCoarsePointer } from '../lib/device';
 
-const ZOOM_STEP = 0.86;          // each scroll tick multiplies distance by this (or its inverse)
-const ZOOM_LERP = 0.25;          // smoothing factor — closer to 1 = snappier, closer to 0 = lazier
+const ZOOM_STEP = 0.86;
+const ZOOM_LERP = 0.25;
 const MIN_DISTANCE = 0.05;
 const MAX_DISTANCE = 5000;
-const TARGET_LERP = 0.18;        // smoothing for the controls.target shift
+const TARGET_LERP = 0.18;
+const LAYOUT_LERP = 0.12;
+const AUTO_ORBIT_SPEED = 0.0032;
+const FLOAT_AMT = 0.045;
+const TAP_SLOP_SQ = isCoarsePointer() ? 24 * 24 : 10 * 10;
 
 export function SpaceScene() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,11 +47,17 @@ export function SpaceScene() {
     const cards: PhotoCard[] = [];
     const cardIndex = new Map<PhotoCard, number>();
     const bakedScales: number[] = [];
+    const basePositions: Vector3[] = [];
+    const targetPositions: Vector3[] = [];
+    const floatPhase: number[] = [];
+
+    const initialMode = useSpacePrefsStore.getState().layoutMode;
     let slots = usePhotoStore.getState().layout;
     if (photos.length > 0) {
       slots =
-        slots && slots.length === photos.length ? slots : computeLayout(photos.length);
-      // Stash the live layout so drop-to-place repositioning sticks for the session.
+        slots && slots.length === photos.length
+          ? slots
+          : computeLayout(photos.length, { mode: initialMode });
       usePhotoStore.getState().setLayout(slots);
       for (let i = 0; i < photos.length; i++) {
         const slot = slots[i];
@@ -56,6 +68,9 @@ export function SpaceScene() {
         cards.push(card);
         cardIndex.set(card, i);
         bakedScales.push(slot.scale);
+        basePositions.push(new Vector3(x, y, z));
+        targetPositions.push(new Vector3(x, y, z));
+        floatPhase.push(i * 0.73);
       }
     }
 
@@ -83,7 +98,35 @@ export function SpaceScene() {
       if (state.resetCounter !== prev.resetCounter) {
         targetDistance = initialDistance;
         targetTarget.copy(initialTarget);
+        userInteracting = true;
+        interactUntil = performance.now() + 2500;
       }
+    });
+
+    // Auto-orbit pauses briefly while the user is touching / dragging.
+    let userInteracting = false;
+    let interactUntil = 0;
+    const markInteract = () => {
+      userInteracting = true;
+      interactUntil = performance.now() + 2200;
+    };
+
+    const applyLayoutSlots = (next: NonNullable<typeof slots>) => {
+      slots = next;
+      usePhotoStore.getState().setLayout(next);
+      for (let i = 0; i < cards.length; i++) {
+        const { x, y, z } = next[i].position;
+        targetPositions[i].set(x, y, z);
+        basePositions[i].set(x, y, z);
+        cards[i].group.scale.setScalar(1);
+      }
+    };
+
+    const unsubLayout = useSpacePrefsStore.subscribe((state, prev) => {
+      if (state.layoutNonce === prev.layoutNonce) return;
+      if (photos.length === 0) return;
+      applyLayoutSlots(computeLayout(photos.length, { mode: state.layoutMode }));
+      markInteract();
     });
 
     const performZoom = (deltaY: number, magnitudeScale: number) => {
@@ -111,6 +154,7 @@ export function SpaceScene() {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      markInteract();
 
       // All wheel events zoom. Pan is via mouse-drag.
       // Magnitude divisor tuned per input source so each feels natural:
@@ -132,6 +176,7 @@ export function SpaceScene() {
       return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
     };
     const onTouchStart = (e: TouchEvent) => {
+      markInteract();
       if (e.touches.length === 2) {
         pinchDist = touchDistance(e.touches);
       }
@@ -139,6 +184,7 @@ export function SpaceScene() {
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || pinchDist <= 0) return;
       e.preventDefault();
+      markInteract();
       const next = touchDistance(e.touches);
       const ratio = next / pinchDist;
       // Spread fingers → zoom in (negative deltaY); pinch together → zoom out.
@@ -230,6 +276,8 @@ export function SpaceScene() {
         },
         scale: bakedScales[idx] * card.group.scale.x,
       };
+      basePositions[idx].copy(card.group.position);
+      targetPositions[idx].copy(card.group.position);
       usePhotoStore.getState().setLayout([...slots]);
     };
 
@@ -350,11 +398,15 @@ export function SpaceScene() {
     const onPointerDown = (e: PointerEvent) => {
       downX = e.clientX;
       downY = e.clientY;
+      markInteract();
     };
     const onPointerUp = (e: PointerEvent) => {
       const dx = e.clientX - downX;
       const dy = e.clientY - downY;
-      if (dx * dx + dy * dy > 16) return;
+      if (dx * dx + dy * dy > TAP_SLOP_SQ) return;
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObjects(targets, false);
       if (hits.length > 0) {
@@ -378,6 +430,8 @@ export function SpaceScene() {
     let raf = 0;
     const tick = () => {
       raf = requestAnimationFrame(tick);
+      const now = performance.now();
+      if (userInteracting && now > interactUntil) userInteracting = false;
 
       // Smooth zoom: lerp camera distance and target.
       controlsBundle.controls.target.lerp(targetTarget, TARGET_LERP);
@@ -387,6 +441,12 @@ export function SpaceScene() {
       if (Math.abs(newDistance - currentDistance) > 1e-4) {
         const dir = camera.position.clone().sub(controlsBundle.controls.target).normalize();
         camera.position.copy(controlsBundle.controls.target).add(dir.multiplyScalar(newDistance));
+      }
+
+      // Auto-orbit the photo cloud when idle (automation).
+      const autoOrbit = useSpacePrefsStore.getState().autoOrbit;
+      if (autoOrbit && !userInteracting && !held) {
+        cardsRoot.rotation.y += AUTO_ORBIT_SPEED;
       }
 
       // Spin momentum: rotate the whole photo cloud, decaying to a stop.
@@ -399,14 +459,17 @@ export function SpaceScene() {
         if (Math.abs(angVel.y) < 1e-5) angVel.y = 0;
       }
 
-      // Billboard every card toward the camera, then re-apply its in-plane roll. Cards in the
-      // (rotating) cloud need the cluster's inverse rotation; a held card lives under the
-      // scene root (identity).
+      // Lerp cards toward layout targets + gentle float bob.
+      const t = now * 0.001;
       rootInvQuat.copy(cardsRoot.quaternion).invert();
-      for (const c of cards) {
+      for (let i = 0; i < cards.length; i++) {
+        const c = cards[i];
         if (held && held.card === c) {
           c.group.quaternion.copy(camera.quaternion);
         } else {
+          basePositions[i].lerp(targetPositions[i], LAYOUT_LERP);
+          const bob = Math.sin(t * 0.7 + floatPhase[i]) * FLOAT_AMT;
+          c.group.position.set(basePositions[i].x, basePositions[i].y + bob, basePositions[i].z);
           c.group.quaternion.copy(camera.quaternion).premultiply(rootInvQuat);
         }
         const roll = rollAngles.get(c);
@@ -454,6 +517,7 @@ export function SpaceScene() {
       canvas.removeEventListener('touchcancel', onTouchEnd);
       unsubFrames();
       unsubReset();
+      unsubLayout();
       recognizer.reset();
       controlsBundle.dispose();
       cards.forEach((c) => c.dispose());

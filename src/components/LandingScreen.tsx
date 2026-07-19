@@ -1,12 +1,21 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { loadPhotoWithHash } from '../lib/loadPhoto';
 
-const ACCEPTED = /\.(jpe?g|png|webp)$/i;
+const ACCEPTED_EXT = /\.(jpe?g|png|webp)$/i;
+const ACCEPTED_MIME = /^image\/(jpeg|png|webp)$/i;
 const DECODE_CONCURRENCY = 4;
+
+function isImageFile(file: File): boolean {
+  if (ACCEPTED_MIME.test(file.type)) return true;
+  if (file.type === '' || file.type === 'application/octet-stream') {
+    return ACCEPTED_EXT.test(file.name);
+  }
+  return ACCEPTED_EXT.test(file.name);
+}
 
 async function mapPool<T, R>(
   items: T[],
@@ -37,18 +46,20 @@ export function LandingScreen() {
   const setProgress = useViewStore((s) => s.setProgress);
   const setPhotos = usePhotoStore((s) => s.setPhotos);
   const [dragOver, setDragOver] = useState(false);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
   const ingest = useCallback(
     async (files: File[]) => {
-      const jpgs = files.filter((f) => ACCEPTED.test(f.name));
-      if (jpgs.length === 0) return;
+      const images = files.filter(isImageFile);
+      if (images.length === 0) return;
 
-      setProgress(0, jpgs.length);
+      setProgress(0, images.length);
       setView('processing');
 
       type Loaded = Awaited<ReturnType<typeof loadPhotoWithHash>>;
       const settled = await mapPool(
-        jpgs,
+        images,
         DECODE_CONCURRENCY,
         async (file) => {
           try {
@@ -68,7 +79,7 @@ export function LandingScreen() {
         const r = settled[i];
         if (!r) continue;
         photos.push(r.photo);
-        accepted.push(jpgs[i]);
+        accepted.push(images[i]);
         hashes.push(r.contentHash);
       }
       setPhotos(photos, accepted, hashes);
@@ -78,11 +89,10 @@ export function LandingScreen() {
   );
 
   const onDrop = useCallback(
-    (e: DragEvent<HTMLLabelElement>) => {
+    (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       setDragOver(false);
-      const items = e.dataTransfer.files;
-      ingest(Array.from(items));
+      ingest(Array.from(e.dataTransfer.files));
     },
     [ingest],
   );
@@ -92,23 +102,22 @@ export function LandingScreen() {
       const files = e.target.files;
       if (!files) return;
       ingest(Array.from(files));
+      e.target.value = '';
     },
     [ingest],
   );
 
   return (
-    <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-4 sm:px-6">
+    <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-5 sm:gap-8 px-4 sm:px-6">
       <div className="flex flex-col items-center gap-2 sm:gap-3 text-center max-w-2xl">
         <p className="landing-brand">PinViz</p>
         <p className="landing-tagline">
-          Your photos, floating in your space — private AR that never leaves this device.
+          Your photos in a private 3D gallery — works great on phone. Nothing is uploaded.
         </p>
       </div>
 
-      <FrostPanel
-        className={`landing-drop${dragOver ? ' is-dragover' : ''}`}
-      >
-        <label
+      <FrostPanel className={`landing-drop${dragOver ? ' is-dragover' : ''}`}>
+        <div
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -118,23 +127,58 @@ export function LandingScreen() {
           className="landing-drop-label"
         >
           <input
+            ref={galleryRef}
             type="file"
             multiple
             accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
             onChange={onPick}
             style={{ display: 'none' }}
           />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onPick}
+            style={{ display: 'none' }}
+          />
           <div className="landing-drop-title">
             <span className="landing-drop-desktop">Drop photos here</span>
-            <span className="landing-drop-mobile">Tap to add photos</span>
+            <span className="landing-drop-mobile">Add photos to start</span>
           </div>
           <div className="landing-drop-hint">
-            JPG, PNG, or WebP. Works entirely on this device — nothing is uploaded.
+            JPG, PNG, or WebP. Everything stays on this device.
           </div>
-        </label>
+          <div className="landing-actions">
+            <button
+              type="button"
+              className="landing-action primary"
+              onClick={() => galleryRef.current?.click()}
+            >
+              Choose from gallery
+            </button>
+            <button
+              type="button"
+              className="landing-action"
+              onClick={() => cameraRef.current?.click()}
+            >
+              Take a photo
+            </button>
+          </div>
+        </div>
       </FrostPanel>
 
-      <p className="landing-badge">Local · Private · Offline-ready</p>
+      <div className="landing-howto">
+        <div className="landing-howto-title">On your phone</div>
+        <ol>
+          <li>Open this site in Chrome / Safari</li>
+          <li>Add photos from gallery or camera</li>
+          <li>Drag to spin · pinch to zoom · tap to open</li>
+          <li>Try Orbit, Cloud/Grid/Wall, and optional Hands AR</li>
+        </ol>
+      </div>
+
+      <p className="landing-badge">Local · Private · Mobile-ready</p>
     </div>
   );
 }

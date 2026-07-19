@@ -3,6 +3,8 @@ import {
   PerspectiveCamera,
   WebGLRenderer,
   ACESFilmicToneMapping,
+  FogExp2,
+  Color,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -27,6 +29,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   const scene = new Scene();
   // Transparent — the live webcam shows through behind the canvas (AR passthrough).
   scene.background = null;
+  // Soft depth haze so farther photos recede (reads better on phones).
+  scene.fog = new FogExp2(new Color(0xdde8e4).getHex(), lowPower ? 0.018 : 0.012);
 
   const camera = new PerspectiveCamera(45, 1, 0.1, 1000);
   camera.position.set(0, 0, 8);
@@ -40,17 +44,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.05;
 
   const composer = new EffectComposer(renderer);
   const renderPass = new RenderPass(scene, camera);
-  renderPass.clearAlpha = 0; // keep the render target transparent so the webcam shows through
+  renderPass.clearAlpha = 0;
   composer.addPass(renderPass);
 
   const outline = createOutlinePass(scene, camera, window.innerWidth, window.innerHeight);
   composer.addPass(outline);
 
-  // SMAA is expensive on phones — skip it when we prefer low power.
   if (!lowPower) {
     const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
     composer.addPass(smaa);

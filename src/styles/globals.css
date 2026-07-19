@@ -254,9 +254,149 @@ button {
 
 .lightbox img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: min(85vh, 100%);
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
   cursor: default;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  font-size: 1.6rem;
+  line-height: 1;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.lightbox-prev { left: max(8px, env(safe-area-inset-left)); }
+.lightbox-next { right: max(8px, env(safe-area-inset-right)); }
+
+.lightbox-caption {
+  position: absolute;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: var(--font-size-md);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+/* ---- Landing actions / howto ---- */
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.landing-action {
+  border: 1px solid var(--border-medium);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border-radius: var(--radius-button);
+  padding: 10px 16px;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-height: 44px;
+}
+
+.landing-action.primary {
+  background: var(--color-accent);
+  border-color: transparent;
+  color: var(--text-on-accent);
+}
+
+.landing-howto {
+  width: min(420px, 92vw);
+  color: var(--text-secondary);
+  font-size: clamp(0.75rem, 3vw, 0.85rem);
+  line-height: 1.45;
+}
+
+.landing-howto-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.landing-howto ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.landing-howto li {
+  margin-bottom: 2px;
+}
+
+/* ---- First-run tips ---- */
+.space-tips {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-bottom)) 16px;
+  background: rgba(20, 20, 20, 0.28);
+  pointer-events: auto;
+}
+
+.space-tips-panel {
+  width: min(420px, 100%);
+  padding: 18px 18px 14px;
+}
+
+.space-tips-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.space-tips-list {
+  margin: 0 0 14px;
+  padding-left: 1.15rem;
+  color: var(--text-secondary);
+  font-size: var(--font-size-md);
+  line-height: 1.45;
+}
+
+.space-tips-ok {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-button);
+  background: var(--color-accent);
+  color: var(--text-on-accent);
+  font-weight: 700;
+  min-height: 44px;
+  letter-spacing: 0.02em;
 }
