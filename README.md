@@ -1,60 +1,58 @@
 # PinViz
 
-Drop photos into a private 3D AR space. Works on **phone and desktop**. Everything runs **in your browser** — no sign-in, no uploads, no trackers.
+Private 3D / AR photo gallery that runs entirely in the browser. Photos never leave your device.
 
-## Use on your phone
+## Use on phone
 
-1. Deploy (Vercel) or run locally, then open the URL in **Chrome** or **Safari** on your phone.
-2. Optional: browser menu → **Add to Home Screen** for an app-like icon.
-3. Tap **Choose from gallery** or **Take a photo**.
-4. In the space:
-   - **Drag** one finger to spin
-   - **Pinch** two fingers to zoom
-   - **Tap** a photo to open it (✕ / ‹ › to navigate)
-5. Controls:
-   - **Orbit** — automatic slow spin
-   - **Cloud / Grid / Spiral / Wall** — rearrange layouts
-   - **Mix** — reshuffle positions
-   - **Hands** — optional front-camera AR + gestures (ask for permission)
+1. Deploy to Vercel (HTTPS) or open a LAN preview.
+2. Optional: **Add to Home Screen** (PWA shell caches after first visit).
+3. **Choose from gallery** / **Take a photo**, or **Continue saved space**.
+4. Drag to orbit · pinch to zoom · tap to open.
+5. HUD: Orbit, layouts (Cloud/Grid/Spiral/Wall/Sphere/Timeline), Mix, Stop, Shot, Save, theme, Motion, Quality, Hands.
 
-Use **HTTPS** (or localhost) so camera / Hands can work. Prefer Wi‑Fi the first time Hands loads the local model (~8 MB).
+## Desktop shortcuts
+
+| Key | Action |
+|-----|--------|
+| `R` | Reshuffle layout |
+| `O` | Toggle auto-orbit |
+| `P` | Snapshot PNG |
+| `Space` / `X` | Stop all motion |
+| `+` / `-` | Zoom |
+| `WASD` / arrows | Pan |
+
+Add `?debug=1` for an on-screen FPS counter (also drives adaptive quality).
 
 ## Stack
 
-- React 19 + Vite + TypeScript
-- Three.js (outline + optional SMAA)
-- Zustand
-- `@mediapipe/tasks-vision` — local WASM + model (same-origin)
-- Vercel static hosting (optional)
+React 19 · Vite 8 · Three.js 0.160 · Zustand · MediaPipe tasks-vision (same-origin WASM) · Tailwind 4 · Vitest · Playwright
 
 ## Setup
 
 ```bash
-npm install   # syncs MediaPipe WASM into public/mediapipe
-npm run dev   # http://localhost:5173
+npm install
+npm run dev
 ```
 
-No environment variables. Camera stays **off** until you press **Hands**.
-
-## Security
-
-- Hand-tracking assets from `/mediapipe` only
-- No third-party promo links or analytics
-- CSP / frame deny / HSTS / Permissions-Policy on Vercel
-- Photos stay as in-memory blob URLs for the session
+No env vars. Camera stays off until **Hands**.
 
 ## Scripts
 
 | Command | Purpose |
 |---------|---------|
-| `npm run dev` | Local dev server |
+| `npm run dev` | Dev server |
 | `npm run build` | Production build |
-| `npm run preview` | Preview the build |
+| `npm run preview` | Preview build |
 | `npm test` | Unit tests |
-| `npm run sync:mediapipe` | Re-copy WASM / fetch model if missing |
+| `npm run test:e2e` | Build + Playwright smoke |
+| `npm run sync:mediapipe` | Sync local MediaPipe assets |
 
-## Deploy
+## Security
 
-Push to GitHub → import on Vercel. No env vars. `postinstall` ensures MediaPipe assets exist before build.
+CSP + frame deny + HSTS + Permissions-Policy on Vercel. No analytics. MediaPipe from `/mediapipe` only. Optional IndexedDB save stores **downscaled** canvases locally — never uploads.
 
-To test phone against your PC: `npm run dev -- --host`, then open `http://<your-lan-ip>:5173` on the phone (same Wi‑Fi). Camera needs HTTPS in many browsers — deploy to Vercel for the smoothest phone camera experience.
+## Notes
+
+- iOS Safari camera + WebGL: verify on a real device (fragile combo).
+- Instanced borders / texture atlas deferred for a later perf pass.
+- Multi-select batch actions deferred.

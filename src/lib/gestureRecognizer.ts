@@ -221,9 +221,16 @@ export class GestureRecognizer {
   private lastTimestamp = 0;
   private wasFist: Record<'Left' | 'Right', boolean> = { Left: false, Right: false };
   private swipeCooldownUntil = 0;
+  /** Consecutive frames with zero hands while a pinch was active — forces release. */
+  private emptyWhileActive = 0;
 
   /** Latest per-hand derived features — read this for continuous, mode-dependent control. */
   snapshot: FrameSnapshot = { Left: null, Right: null };
+
+  /** True if either hand currently has an active pinch. */
+  get hasActiveGesture(): boolean {
+    return this.leftPinch.active || this.rightPinch.active;
+  }
 
   /** Clear all gesture state (call when the camera stops). */
   reset(): void {
@@ -237,6 +244,7 @@ export class GestureRecognizer {
     this.lastTimestamp = 0;
     this.wasFist = { Left: false, Right: false };
     this.swipeCooldownUntil = 0;
+    this.emptyWhileActive = 0;
     this.snapshot = { Left: null, Right: null };
   }
 
@@ -247,6 +255,23 @@ export class GestureRecognizer {
 
     const left = frame.hands.find((h) => h.handedness === 'Left');
     const right = frame.hands.find((h) => h.handedness === 'Right');
+
+    // Watchdog: if tracking drops while a pinch is active for several frames, force pinchEnd.
+    const anyActive = this.leftPinch.active || this.rightPinch.active;
+    if (frame.hands.length === 0 && anyActive) {
+      this.emptyWhileActive += 1;
+      if (this.emptyWhileActive >= 8) {
+        this.processHand('Left', undefined, this.leftPinch, events);
+        this.processHand('Right', undefined, this.rightPinch, events);
+        this.endZoom();
+        this.endTwist();
+        this.emptyWhileActive = 0;
+        this.snapshot = { Left: null, Right: null };
+        return events;
+      }
+    } else {
+      this.emptyWhileActive = 0;
+    }
 
     this.processHand('Left', left, this.leftPinch, events);
     this.processHand('Right', right, this.rightPinch, events);
@@ -265,10 +290,10 @@ export class GestureRecognizer {
 
     if (bothPresent && neitherPinching) {
       this.endTwist();
-      this.processTwoHandZoom(left!, right!, events);
+      this.processTwoHandZoom(left, right, events);
     } else if (bothPresent && bothPinching) {
       this.endZoom();
-      this.processTwoHandTwist(left!, right!, events);
+      this.processTwoHandTwist(left, right, events);
     } else {
       this.endZoom();
       this.endTwist();

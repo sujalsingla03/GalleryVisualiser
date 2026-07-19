@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
     "sync:mediapipe": "node scripts/sync-mediapipe.mjs",
     "postinstall": "node scripts/sync-mediapipe.mjs"
   },
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@fontsource-variable/geist": "^5.2.7",
     "@fontsource-variable/geist-mono": "^5.2.7",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.0.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^24.12.2",

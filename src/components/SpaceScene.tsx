@@ -18,6 +18,15 @@ import { GestureRecognizer, type FrameSnapshot } from '../lib/gestureRecognizer'
 import { useViewStore } from '../store/viewStore';
 import { useSpacePrefsStore } from '../store/spacePrefsStore';
 import { isCoarsePointer } from '../lib/device';
+import { downloadCanvasPng } from '../lib/snapshot';
+import { registerSnapshot } from '../lib/snapshotBridge';
+import {
+  approach,
+  decayVelocity2,
+  isDebugQuery,
+  DISTANCE_EPS,
+  POSITION_EPS,
+} from '../lib/motion';
 
 const ZOOM_STEP = 0.86;
 const ZOOM_LERP = 0.25;
@@ -25,9 +34,14 @@ const MIN_DISTANCE = 0.05;
 const MAX_DISTANCE = 5000;
 const TARGET_LERP = 0.18;
 const LAYOUT_LERP = 0.12;
-const AUTO_ORBIT_SPEED = 0.0032;
-const FLOAT_AMT = 0.045;
+const AUTO_ORBIT_SPEED = 0.22; // rad/sec (scaled by dt)
+const FLOAT_AMT = 0.028;
+const FLOAT_AMT_LOW = 0.012;
+const IDLE_RESUME_MS = 2800;
+const HAND_FRAME_TIMEOUT_MS = 450;
 const TAP_SLOP_SQ = isCoarsePointer() ? 24 * 24 : 10 * 10;
+const SPIN_FRICTION = 0.95;
+const SPIN_MAX = 7.2; // rad/sec (was per-frame; now dt-based)
 
 export function SpaceScene() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -39,7 +53,11 @@ export function SpaceScene() {
     if (!canvas) return;
 
     const bundle = createScene(canvas);
-    const { scene, camera, composer, outline, resize } = bundle;
+    const { scene, camera, composer, outline, resize, renderer, setPixelRatioCap } = bundle;
+
+    registerSnapshot(() => {
+      downloadCanvasPng(renderer.domElement, `pinviz-${Date.now()}.png`);
+    });
 
     const cardsRoot = new Group();
     scene.add(cardsRoot);
@@ -103,12 +121,12 @@ export function SpaceScene() {
       }
     });
 
-    // Auto-orbit pauses briefly while the user is touching / dragging.
+    // Auto-orbit pauses fully while the user is interacting; resumes only after idle timeout.
     let userInteracting = false;
     let interactUntil = 0;
     const markInteract = () => {
       userInteracting = true;
-      interactUntil = performance.now() + 2200;
+      interactUntil = performance.now() + IDLE_RESUME_MS;
     };
 
     const applyLayoutSlots = (next: NonNullable<typeof slots>) => {
@@ -168,6 +186,21 @@ export function SpaceScene() {
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
+    const onKeyZoom = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail;
+      if (typeof detail !== 'number') return;
+      markInteract();
+      performZoom(detail, 40);
+    };
+    const onKeyPan = (e: Event) => {
+      const detail = (e as CustomEvent<{ dx: number; dy: number }>).detail;
+      if (!detail) return;
+      markInteract();
+      performPan(detail.dx, detail.dy);
+    };
+    window.addEventListener('pinviz-zoom', onKeyZoom);
+    window.addEventListener('pinviz-pan', onKeyPan);
+
     // Mobile: two-finger pinch zoom (OrbitControls zoom is disabled for custom smoothing).
     let pinchDist = 0;
     const touchDistance = (touches: TouchList) => {
@@ -219,13 +252,11 @@ export function SpaceScene() {
     const recognizer = new GestureRecognizer();
     const PAN_SCALE_X = canvas.clientWidth * 0.5;
     const PAN_SCALE_Y = canvas.clientHeight * 0.5;
-    const TWO_HAND_GAIN = 3.0;      // inter-hand distance change → cloud zoom factor
-    const TWIST_GAIN = 1.6;         // two-hand twist angle → cloud turntable rotation
-    const SPIN_GAIN = 0.9;          // swipe velocity → angular velocity
-    const SPIN_FRICTION = 0.95;     // per-frame decay of the cluster spin
-    const SPIN_MAX = 0.12;          // clamp on angular velocity (rad/frame)
-    const HELD_MIN_DIST = 1.5;      // nearest a held photo can be pulled
-    const HELD_MAX_DIST = 40;       // farthest a held photo can be pushed
+    const TWO_HAND_GAIN = 3.0;
+    const TWIST_GAIN = 1.6;
+    const SPIN_GAIN = 54; // swipe delta → rad/sec impulse
+    const HELD_MIN_DIST = 1.5;
+    const HELD_MAX_DIST = 40;
 
     const targets: Object3D[] = cards.map((c) => c.mesh);
     const meshToCard = new Map<Object3D, PhotoCard>(cards.map((c) => [c.mesh, c]));
@@ -281,9 +312,22 @@ export function SpaceScene() {
       usePhotoStore.getState().setLayout([...slots]);
     };
 
+    const forceReleaseHeld = () => {
+      if (held) {
+        cardsRoot.attach(held.card.group);
+        persistPlacement(held.card);
+        held = null;
+      }
+      panHand = null;
+      recognizer.reset();
+    };
+
+    let lastHandFrameAt = 0;
     const unsubFrames = handTracker.onFrame((frame) => {
+      lastHandFrameAt = performance.now();
       const events = recognizer.process(frame);
       snapshot = recognizer.snapshot;
+      if (events.length > 0 || recognizer.hasActiveGesture) markInteract();
       for (const ev of events) {
         if (ev.type === 'pinchStart') {
           if (held) continue;
@@ -367,14 +411,21 @@ export function SpaceScene() {
           cardsRoot.rotation.y += ev.angleDelta * TWIST_GAIN;
         } else if (ev.type === 'swipe') {
           if (held) continue;
-          // Flick the cloud — horizontal swipe spins around Y, vertical tumbles around X.
           angVel.y = Math.max(-SPIN_MAX, Math.min(SPIN_MAX, angVel.y + ev.velocity.x * SPIN_GAIN));
           angVel.x = Math.max(-SPIN_MAX, Math.min(SPIN_MAX, angVel.x + ev.velocity.y * SPIN_GAIN));
         } else if (ev.type === 'fist') {
-          // Make a fist to brake the cloud's spin instantly.
           angVel.x = 0;
           angVel.y = 0;
         }
+      }
+    });
+
+    const unsubStop = useSpacePrefsStore.subscribe((state, prev) => {
+      if (state.stopNonce !== prev.stopNonce) {
+        angVel.x = 0;
+        angVel.y = 0;
+        forceReleaseHeld();
+        markInteract();
       }
     });
 
@@ -428,55 +479,95 @@ export function SpaceScene() {
     window.visualViewport?.addEventListener('scroll', onResize);
 
     let raf = 0;
+    let lastTick = performance.now();
+    let fpsAccum = 0;
+    let fpsFrames = 0;
+    let fpsDisplay = 0;
+    const debugFps = isDebugQuery();
+    const fpsEl = debugFps ? document.createElement('div') : null;
+    if (fpsEl) {
+      fpsEl.className = 'fps-debug';
+      fpsEl.textContent = 'FPS —';
+      document.body.appendChild(fpsEl);
+    }
+
+    // matrixAutoUpdate off — we update matrices only when cards move.
+    for (const c of cards) {
+      c.group.matrixAutoUpdate = false;
+      c.group.updateMatrix();
+    }
+    cardsRoot.matrixAutoUpdate = true;
+
     const tick = () => {
       raf = requestAnimationFrame(tick);
       const now = performance.now();
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTick) / 1000));
+      lastTick = now;
       if (userInteracting && now > interactUntil) userInteracting = false;
 
-      // Smooth zoom: lerp camera distance and target.
-      controlsBundle.controls.target.lerp(targetTarget, TARGET_LERP);
+      // Hand-tracking timeout while holding — MediaPipe may stop sending frames.
+      if ((held || panHand) && lastHandFrameAt > 0 && now - lastHandFrameAt > HAND_FRAME_TIMEOUT_MS) {
+        forceReleaseHeld();
+      }
+
+      const prefs = useSpacePrefsStore.getState();
+      const reduced = prefs.effectiveReducedMotion();
+      const lowQuality = prefs.qualityTier === 'low';
+
+      // Smooth zoom / target with snap-to-rest.
+      const tx = controlsBundle.controls.target.x;
+      const ty = controlsBundle.controls.target.y;
+      const tz = controlsBundle.controls.target.z;
+      controlsBundle.controls.target.x = approach(tx, targetTarget.x, TARGET_LERP, POSITION_EPS);
+      controlsBundle.controls.target.y = approach(ty, targetTarget.y, TARGET_LERP, POSITION_EPS);
+      controlsBundle.controls.target.z = approach(tz, targetTarget.z, TARGET_LERP, POSITION_EPS);
       controlsBundle.update();
+
       const currentDistance = camera.position.distanceTo(controlsBundle.controls.target);
-      const newDistance = currentDistance + (targetDistance - currentDistance) * ZOOM_LERP;
-      if (Math.abs(newDistance - currentDistance) > 1e-4) {
+      const blended = approach(currentDistance, targetDistance, ZOOM_LERP, DISTANCE_EPS);
+      if (Math.abs(blended - currentDistance) > DISTANCE_EPS) {
         const dir = camera.position.clone().sub(controlsBundle.controls.target).normalize();
-        camera.position.copy(controlsBundle.controls.target).add(dir.multiplyScalar(newDistance));
+        camera.position.copy(controlsBundle.controls.target).add(dir.multiplyScalar(blended));
       }
 
-      // Auto-orbit the photo cloud when idle (automation).
-      const autoOrbit = useSpacePrefsStore.getState().autoOrbit;
-      if (autoOrbit && !userInteracting && !held) {
-        cardsRoot.rotation.y += AUTO_ORBIT_SPEED;
+      // Auto-orbit only when fully idle (suspended during/after interaction).
+      if (prefs.autoOrbit && !reduced && !userInteracting && !held && angVel.x === 0 && angVel.y === 0) {
+        cardsRoot.rotation.y += AUTO_ORBIT_SPEED * dt;
       }
 
-      // Spin momentum: rotate the whole photo cloud, decaying to a stop.
-      if (Math.abs(angVel.x) > 1e-5 || Math.abs(angVel.y) > 1e-5) {
-        cardsRoot.rotation.y += angVel.y;
-        cardsRoot.rotation.x += angVel.x;
-        angVel.x *= SPIN_FRICTION;
-        angVel.y *= SPIN_FRICTION;
-        if (Math.abs(angVel.x) < 1e-5) angVel.x = 0;
-        if (Math.abs(angVel.y) < 1e-5) angVel.y = 0;
+      // Spin momentum — dt-scaled friction, hard zero.
+      if (angVel.x !== 0 || angVel.y !== 0) {
+        cardsRoot.rotation.y += angVel.y * dt;
+        cardsRoot.rotation.x += angVel.x * dt;
+        decayVelocity2(angVel, SPIN_FRICTION, dt);
       }
 
-      // Lerp cards toward layout targets + gentle float bob.
+      const floatAmp = reduced || lowQuality ? 0 : prefs.qualityTier === 'balanced' ? FLOAT_AMT_LOW : FLOAT_AMT;
       const t = now * 0.001;
+      const allowFloat = floatAmp > 0 && !userInteracting;
       rootInvQuat.copy(cardsRoot.quaternion).invert();
+
       for (let i = 0; i < cards.length; i++) {
         const c = cards[i];
         if (held && held.card === c) {
           c.group.quaternion.copy(camera.quaternion);
-        } else {
-          basePositions[i].lerp(targetPositions[i], LAYOUT_LERP);
-          const bob = Math.sin(t * 0.7 + floatPhase[i]) * FLOAT_AMT;
-          c.group.position.set(basePositions[i].x, basePositions[i].y + bob, basePositions[i].z);
-          c.group.quaternion.copy(camera.quaternion).premultiply(rootInvQuat);
+          c.group.updateMatrix();
+          continue;
         }
+
+        const before = basePositions[i];
+        before.x = approach(before.x, targetPositions[i].x, LAYOUT_LERP, POSITION_EPS);
+        before.y = approach(before.y, targetPositions[i].y, LAYOUT_LERP, POSITION_EPS);
+        before.z = approach(before.z, targetPositions[i].z, LAYOUT_LERP, POSITION_EPS);
+
+        const bob = allowFloat ? Math.sin(t * 0.55 + floatPhase[i]) * floatAmp : 0;
+        c.group.position.set(before.x, before.y + bob, before.z);
+        c.group.quaternion.copy(camera.quaternion).premultiply(rootInvQuat);
         const roll = rollAngles.get(c);
         if (roll) c.group.rotateZ(roll);
+        c.group.updateMatrix();
       }
 
-      // Hover highlight: prefer the mouse cursor; otherwise raycast from a pointing hand.
       let hovered: Object3D | null = null;
       if (held) {
         hovered = held.card.mesh;
@@ -495,14 +586,50 @@ export function SpaceScene() {
           hovered = hits.length > 0 ? hits[0].object : null;
         }
       }
-      outline.selectedObjects = hovered ? [hovered] : [];
+      if (outline) outline.selectedObjects = hovered ? [hovered] : [];
 
       composer.render();
+
+      if (fpsEl) {
+        fpsAccum += dt;
+        fpsFrames += 1;
+        if (fpsAccum >= 0.5) {
+          fpsDisplay = Math.round(fpsFrames / fpsAccum);
+          fpsEl.textContent = `FPS ${fpsDisplay} · q=${prefs.qualityTier}`;
+          fpsAccum = 0;
+          fpsFrames = 0;
+
+          // Adaptive quality: step down if FPS stays low (unless user locked).
+          if (!prefs.qualityLocked && fpsDisplay > 0 && fpsDisplay < 28) {
+            if (prefs.qualityTier === 'high') {
+              prefs.setQualityTier('balanced');
+              setPixelRatioCap(1.5);
+            } else if (prefs.qualityTier === 'balanced') {
+              prefs.setQualityTier('low');
+              setPixelRatioCap(1.25);
+            }
+          }
+        }
+      }
     };
     tick();
 
+    // WebGL context loss / restore
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+    };
+    const onContextRestored = () => {
+      resize(
+        Math.round(window.visualViewport?.width ?? window.innerWidth),
+        Math.round(window.visualViewport?.height ?? window.innerHeight),
+      );
+    };
+    canvas.addEventListener('webglcontextlost', onContextLost, false);
+    canvas.addEventListener('webglcontextrestored', onContextRestored, false);
+
     return () => {
       cancelAnimationFrame(raf);
+      fpsEl?.remove();
       window.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('scroll', onResize);
@@ -515,9 +642,15 @@ export function SpaceScene() {
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
       canvas.removeEventListener('touchcancel', onTouchEnd);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      window.removeEventListener('pinviz-zoom', onKeyZoom);
+      window.removeEventListener('pinviz-pan', onKeyPan);
       unsubFrames();
       unsubReset();
       unsubLayout();
+      unsubStop();
+      registerSnapshot(null);
       recognizer.reset();
       controlsBundle.dispose();
       cards.forEach((c) => c.dispose());

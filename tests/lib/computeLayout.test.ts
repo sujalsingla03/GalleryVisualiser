@@ -80,11 +80,16 @@ describe('computeLayout', () => {
     expect(a).toEqual(b);
   });
 
-  it('supports grid, spiral, and wall modes', () => {
+  it('supports grid, spiral, wall, sphere, and timeline modes', () => {
     expect(computeLayout(9, { mode: 'grid' })).toHaveLength(9);
     expect(computeLayout(12, { mode: 'spiral' })).toHaveLength(12);
     const wall = computeLayout(8, { mode: 'wall' });
     expect(wall).toHaveLength(8);
     expect(wall.every((s) => Math.abs(s.position.z) < 0.01)).toBe(true);
+    const sphere = computeLayout(20, { mode: 'sphere' });
+    expect(sphere).toHaveLength(20);
+    const timeline = computeLayout(5, { mode: 'timeline' });
+    expect(timeline).toHaveLength(5);
+    expect(timeline[0].position.x).toBeLessThan(timeline[4].position.x);
   });
 });

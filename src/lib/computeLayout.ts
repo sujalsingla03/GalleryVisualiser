@@ -1,4 +1,4 @@
-export type LayoutMode = 'scatter' | 'grid' | 'spiral' | 'wall';
+export type LayoutMode = 'scatter' | 'grid' | 'spiral' | 'wall' | 'sphere' | 'timeline';
 
 export interface LayoutOptions {
   spread?: number;
@@ -145,6 +145,54 @@ function layoutWall(count: number, options: LayoutOptions, rng: () => number): P
   return slots;
 }
 
+/** Fibonacci-sphere distribution — photos wrap a globe. */
+function layoutSphere(count: number, options: LayoutOptions, rng: () => number): PhotoSlot[] {
+  const radius = options.spread ?? Math.max(3.2, Math.cbrt(count) * 1.6);
+  const scaleMin = options.scaleMin ?? 0.55;
+  const scaleMax = options.scaleMax ?? 1.25;
+  const slots: PhotoSlot[] = [];
+  const golden = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < count; i++) {
+    const y = 1 - (i / Math.max(count - 1, 1)) * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = golden * i;
+    slots.push({
+      index: i,
+      position: {
+        x: Math.cos(theta) * r * radius,
+        y: y * radius,
+        z: Math.sin(theta) * r * radius,
+      },
+      scale: randomScale(scaleMin, scaleMax, rng),
+    });
+  }
+  return slots;
+}
+
+/** Left-to-right timeline by ingest order (index). */
+function layoutTimeline(count: number, options: LayoutOptions, rng: () => number): PhotoSlot[] {
+  const gap = 1.7;
+  const scaleMin = options.scaleMin ?? 0.7;
+  const scaleMax = options.scaleMax ?? 1.1;
+  const slots: PhotoSlot[] = [];
+  const originX = -((count - 1) * gap) / 2;
+
+  for (let i = 0; i < count; i++) {
+    const wave = Math.sin(i * 0.55) * 0.55;
+    slots.push({
+      index: i,
+      position: {
+        x: originX + i * gap,
+        y: wave + (rng() - 0.5) * 0.1,
+        z: (rng() - 0.5) * 0.35,
+      },
+      scale: randomScale(scaleMin, scaleMax, rng),
+    });
+  }
+  return slots;
+}
+
 export function computeLayout(
   count: number,
   options: LayoutOptions = {},
@@ -159,6 +207,10 @@ export function computeLayout(
       return layoutSpiral(count, options, rng);
     case 'wall':
       return layoutWall(count, options, rng);
+    case 'sphere':
+      return layoutSphere(count, options, rng);
+    case 'timeline':
+      return layoutTimeline(count, options, rng);
     case 'scatter':
     default:
       return layoutScatter(count, options, rng);
@@ -170,6 +222,15 @@ export const LAYOUT_MODE_LABELS: Record<LayoutMode, string> = {
   grid: 'Grid',
   spiral: 'Spiral',
   wall: 'Wall',
+  sphere: 'Sphere',
+  timeline: 'Timeline',
 };
 
-export const LAYOUT_MODES: LayoutMode[] = ['scatter', 'grid', 'spiral', 'wall'];
+export const LAYOUT_MODES: LayoutMode[] = [
+  'scatter',
+  'grid',
+  'spiral',
+  'wall',
+  'sphere',
+  'timeline',
+];

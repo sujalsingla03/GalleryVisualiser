@@ -19,17 +19,23 @@ export interface SceneBundle {
   camera: PerspectiveCamera;
   renderer: WebGLRenderer;
   composer: EffectComposer;
-  outline: OutlinePass;
+  outline: OutlinePass | null;
+  lowPower: boolean;
   resize: (w: number, h: number) => void;
   dispose: () => void;
+  setPixelRatioCap: (cap: number) => void;
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   const lowPower = preferLowPowerMedia();
+  if (import.meta.env.DEV) {
+    console.info(
+      `[PinViz] low-power=${lowPower} dprCap=${lowPower ? 1.5 : 2} smaa=${!lowPower} outline=${!lowPower}`,
+    );
+  }
+
   const scene = new Scene();
-  // Transparent — the live webcam shows through behind the canvas (AR passthrough).
   scene.background = null;
-  // Soft depth haze so farther photos recede (reads better on phones).
   scene.fog = new FogExp2(new Color(0xdde8e4).getHex(), lowPower ? 0.018 : 0.012);
 
   const camera = new PerspectiveCamera(45, 1, 0.1, 1000);
@@ -40,8 +46,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
     antialias: false,
     alpha: true,
     powerPreference: lowPower ? 'low-power' : 'high-performance',
+    preserveDrawingBuffer: true, // needed for local snapshot export
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
+  let dprCap = lowPower ? 1.5 : 2;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, dprCap));
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
@@ -51,8 +59,12 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   renderPass.clearAlpha = 0;
   composer.addPass(renderPass);
 
-  const outline = createOutlinePass(scene, camera, window.innerWidth, window.innerHeight);
-  composer.addPass(outline);
+  // OutlinePass is expensive — skip entirely on low-power devices.
+  let outline: OutlinePass | null = null;
+  if (!lowPower) {
+    outline = createOutlinePass(scene, camera, window.innerWidth, window.innerHeight);
+    composer.addPass(outline);
+  }
 
   if (!lowPower) {
     const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
@@ -68,10 +80,15 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
     composer.setSize(w, h);
   }
 
+  function setPixelRatioCap(cap: number) {
+    dprCap = cap;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, dprCap));
+  }
+
   function dispose() {
     composer.dispose();
     renderer.dispose();
   }
 
-  return { scene, camera, renderer, composer, outline, resize, dispose };
+  return { scene, camera, renderer, composer, outline, lowPower, resize, dispose, setPixelRatioCap };
 }

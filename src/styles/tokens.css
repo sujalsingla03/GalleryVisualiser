@@ -63,3 +63,33 @@
   --radius-button: 6px;
   --radius-panel: 12px;
 }
+
+/* Gallery wall — warm light paper */
+:root[data-theme='gallery'] {
+  --color-accent: #c45c26;
+  --color-accent-glow: rgba(196, 92, 38, 0.45);
+  --surface-base: #f3efe6;
+  --surface-elevated: #fffcf7;
+  --surface-glass: rgba(255, 252, 247, 0.72);
+  --text-primary: #3a3228;
+  --text-secondary: #6a5e50;
+  --text-tertiary: #8a7c6c;
+  --text-on-accent: #fffaf4;
+  --border-subtle: rgba(58, 50, 40, 0.1);
+  --border-medium: rgba(58, 50, 40, 0.18);
+}
+
+/* Night — deep slate with mint accent */
+:root[data-theme='night'] {
+  --color-accent: #5eead4;
+  --color-accent-glow: rgba(94, 234, 212, 0.5);
+  --surface-base: #0f1419;
+  --surface-elevated: #1a222c;
+  --surface-glass: rgba(26, 34, 44, 0.72);
+  --text-primary: #e8eef4;
+  --text-secondary: #a8b4c0;
+  --text-tertiary: #7a8794;
+  --text-on-accent: #0f1419;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.16);
+}

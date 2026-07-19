@@ -1,13 +1,20 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { loadPhotoWithHash } from '../lib/loadPhoto';
+import {
+  loadSpaceSession,
+  blobToCanvas,
+  type SavedSpaceMeta,
+} from '../lib/sessionStore';
+import type { Photo } from '../types/photo';
 
 const ACCEPTED_EXT = /\.(jpe?g|png|webp)$/i;
 const ACCEPTED_MIME = /^image\/(jpeg|png|webp)$/i;
 const DECODE_CONCURRENCY = 4;
+const MAX_PHOTOS = 400;
 
 function isImageFile(file: File): boolean {
   if (ACCEPTED_MIME.test(file.type)) return true;
@@ -45,14 +52,44 @@ export function LandingScreen() {
   const setView = useViewStore((s) => s.setView);
   const setProgress = useViewStore((s) => s.setProgress);
   const setPhotos = usePhotoStore((s) => s.setPhotos);
+  const setLayout = usePhotoStore((s) => s.setLayout);
   const [dragOver, setDragOver] = useState(false);
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
+  const [savedMeta, setSavedMeta] = useState<SavedSpaceMeta | null>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    loadSpaceSession()
+      .then((rec) => {
+        if (!cancelled && rec) {
+          setSavedMeta({
+            savedAt: rec.savedAt,
+            photoCount: rec.photoCount,
+            layoutMode: rec.layoutMode,
+          });
+        }
+      })
+      .catch(() => {
+        /* IndexedDB unavailable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const ingest = useCallback(
     async (files: File[]) => {
-      const images = files.filter(isImageFile);
+      let images = files.filter(isImageFile);
       if (images.length === 0) return;
+
+      if (images.length > MAX_PHOTOS) {
+        setLimitMsg(`Only the first ${MAX_PHOTOS} photos will be used (${images.length} selected).`);
+        images = images.slice(0, MAX_PHOTOS);
+      } else {
+        setLimitMsg(null);
+      }
 
       setProgress(0, images.length);
       setView('processing');
@@ -87,6 +124,29 @@ export function LandingScreen() {
     },
     [setView, setProgress, setPhotos],
   );
+
+  const continueSaved = useCallback(async () => {
+    const rec = await loadSpaceSession();
+    if (!rec) return;
+    setProgress(0, rec.photoCount);
+    setView('processing');
+    const photos: Photo[] = [];
+    for (let i = 0; i < rec.canvases.length; i++) {
+      const canvas = await blobToCanvas(rec.canvases[i]);
+      const blobUrl = URL.createObjectURL(rec.canvases[i]);
+      photos.push({
+        id: `saved-${i}-${rec.names[i]}`,
+        name: rec.names[i] ?? `photo-${i}`,
+        blobUrl,
+        canvas,
+        aspectRatio: rec.aspects[i] ?? canvas.width / canvas.height,
+      });
+      setProgress(i + 1, rec.photoCount);
+    }
+    setPhotos(photos, [], photos.map((_, i) => `saved-${i}`));
+    setLayout(rec.layout);
+    setView('space');
+  }, [setView, setProgress, setPhotos, setLayout]);
 
   const onDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
@@ -147,7 +207,7 @@ export function LandingScreen() {
             <span className="landing-drop-mobile">Add photos to start</span>
           </div>
           <div className="landing-drop-hint">
-            JPG, PNG, or WebP. Everything stays on this device.
+            JPG, PNG, or WebP · up to {MAX_PHOTOS} photos · stays on this device
           </div>
           <div className="landing-actions">
             <button
@@ -168,13 +228,25 @@ export function LandingScreen() {
         </div>
       </FrostPanel>
 
+      {savedMeta && (
+        <button type="button" className="landing-action primary" onClick={() => void continueSaved()}>
+          Continue saved space ({savedMeta.photoCount} photos)
+        </button>
+      )}
+
+      {limitMsg && (
+        <p className="landing-limit" role="status">
+          {limitMsg}
+        </p>
+      )}
+
       <div className="landing-howto">
         <div className="landing-howto-title">On your phone</div>
         <ol>
-          <li>Open this site in Chrome / Safari</li>
+          <li>Open this site in Chrome / Safari (HTTPS)</li>
           <li>Add photos from gallery or camera</li>
           <li>Drag to spin · pinch to zoom · tap to open</li>
-          <li>Try Orbit, Cloud/Grid/Wall, and optional Hands AR</li>
+          <li>Use Orbit, layouts, Save, and optional Hands AR</li>
         </ol>
       </div>
 

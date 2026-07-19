@@ -13,8 +13,11 @@ dist-ssr
 *.local
 .env
 
-# MediaPipe WASM is synced from node_modules on install (large binaries)
-public/mediapipe/wasm/
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # Editor directories and files
 .vscode/*

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { SvgFilters } from './components/SvgFilters';
 import { LandingScreen } from './components/LandingScreen';
 import { ProcessingScreen } from './components/ProcessingScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useViewStore } from './store/viewStore';
 
 const SpaceView = lazy(() =>
@@ -17,9 +18,11 @@ export default function App() {
       {view === 'landing' && <LandingScreen />}
       {view === 'processing' && <ProcessingScreen />}
       {view === 'space' && (
-        <Suspense fallback={null}>
-          <SpaceView />
-        </Suspense>
+        <ErrorBoundary label="SpaceView">
+          <Suspense fallback={<div className="space-loading">Opening your space…</div>}>
+            <SpaceView />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </>
   );
