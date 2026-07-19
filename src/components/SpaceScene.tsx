@@ -7,6 +7,8 @@ import {
   Vector3,
   type Object3D,
   type Intersection,
+  type PerspectiveCamera,
+  type Scene,
 } from 'three';
 import { createScene } from '../three/createScene';
 import { createPhotoCard, type PhotoCard } from '../three/createPhotoCard';
@@ -27,6 +29,15 @@ import {
   DISTANCE_EPS,
   POSITION_EPS,
 } from '../lib/motion';
+import type { DrawingLayerHandle } from './DrawingLayer';
+import { useDrawingStore } from '../store/drawingStore';
+
+/** Ref passed from SpaceView so DrawingLayer can receive scene + camera after mount. */
+export interface SceneContextRef {
+  scene: Scene | null;
+  camera: PerspectiveCamera | null;
+  canvas: HTMLCanvasElement | null;
+}
 
 const ZOOM_STEP = 0.86;
 const ZOOM_LERP = 0.25;
@@ -43,7 +54,13 @@ const TAP_SLOP_SQ = isCoarsePointer() ? 24 * 24 : 10 * 10;
 const SPIN_FRICTION = 0.95;
 const SPIN_MAX = 7.2; // rad/sec (was per-frame; now dt-based)
 
-export function SpaceScene() {
+export function SpaceScene({
+  drawingHandleRef,
+  sceneContextRef,
+}: {
+  drawingHandleRef?: React.RefObject<DrawingLayerHandle | null>;
+  sceneContextRef?: React.RefObject<SceneContextRef>;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const photos = usePhotoStore((s) => s.photos);
   const setSelected = usePhotoStore((s) => s.setSelected);
@@ -54,6 +71,11 @@ export function SpaceScene() {
 
     const bundle = createScene(canvas);
     const { scene, camera, composer, outline, resize, renderer, setPixelRatioCap } = bundle;
+
+    // Expose scene + camera so DrawingLayer (mounted in SpaceView) can add stroke meshes.
+    if (sceneContextRef) {
+      sceneContextRef.current = { scene, camera, canvas };
+    }
 
     registerSnapshot(() => {
       downloadCanvasPng(renderer.domElement, `GallerySphere-${Date.now()}.png`);
@@ -446,6 +468,27 @@ export function SpaceScene() {
         } else if (ev.type === 'fist') {
           angVel.x = 0;
           angVel.y = 0;
+        } else if (ev.type === 'drawStart') {
+          // Only draw if drawing mode is enabled and no card is currently held.
+          if (!held && useDrawingStore.getState().drawingEnabled) {
+            drawingHandleRef?.current?.onDrawStart(ev.pointer.x, ev.pointer.y);
+          }
+          // Publish finger-tip screen position for the FingerCursor overlay regardless.
+          window.dispatchEvent(new CustomEvent('GallerySphere-finger', {
+            detail: { x: ev.pointer.x, y: ev.pointer.y, drawing: useDrawingStore.getState().drawingEnabled },
+          }));
+        } else if (ev.type === 'drawMove') {
+          if (!held && useDrawingStore.getState().drawingEnabled) {
+            drawingHandleRef?.current?.onDrawMove(ev.pointer.x, ev.pointer.y);
+          }
+          window.dispatchEvent(new CustomEvent('GallerySphere-finger', {
+            detail: { x: ev.pointer.x, y: ev.pointer.y, drawing: useDrawingStore.getState().drawingEnabled },
+          }));
+        } else if (ev.type === 'drawEnd') {
+          if (useDrawingStore.getState().drawingEnabled) {
+            drawingHandleRef?.current?.onDrawEnd();
+          }
+          window.dispatchEvent(new CustomEvent('GallerySphere-finger', { detail: null }));
         }
       }
     });
@@ -686,6 +729,7 @@ export function SpaceScene() {
     return () => {
       cancelAnimationFrame(raf);
       fpsEl?.remove();
+      if (sceneContextRef) sceneContextRef.current = { scene: null, camera: null, canvas: null };
       window.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('resize', onResize);
       window.visualViewport?.removeEventListener('scroll', onResize);

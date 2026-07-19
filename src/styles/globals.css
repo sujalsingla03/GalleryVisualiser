@@ -473,3 +473,400 @@ button {
     animation: none !important;
   }
 }
+
+/* ============================================================
+   Drawing Panel
+   ============================================================ */
+
+/* Slide-in wrapper — positioned bottom-left above the gesture dock */
+.drawing-panel-wrapper {
+  position: fixed;
+  bottom: max(80px, calc(env(safe-area-inset-bottom) + 64px));
+  left: max(12px, env(safe-area-inset-left));
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  transition:
+    opacity 0.22s var(--ease-translate),
+    transform 0.22s var(--ease-translate);
+}
+
+.drawing-panel-wrapper.is-open {
+  pointer-events: auto;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+@media (min-width: 640px) {
+  .drawing-panel-wrapper {
+    bottom: auto;
+    top: max(80px, calc(env(safe-area-inset-top) + 64px));
+    left: max(24px, env(safe-area-inset-left));
+  }
+}
+
+/* Panel card */
+.drawing-panel {
+  width: min(280px, calc(100vw - 24px));
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Header row */
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dp-title {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.dp-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* On/off toggle pill */
+.dp-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  min-height: 26px;
+  min-width: unset;
+  transition:
+    background var(--duration-color) var(--ease-translate),
+    color var(--duration-color) var(--ease-translate),
+    border-color var(--duration-color) var(--ease-translate);
+}
+
+.dp-toggle-btn.is-on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--text-on-accent);
+}
+
+.dp-toggle-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-on-accent);
+  flex-shrink: 0;
+}
+
+.dp-toggle-dot.is-live {
+  animation: dp-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes dp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.7); }
+}
+
+.dp-close-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  line-height: 1;
+  min-height: 26px;
+  min-width: 26px;
+  border-radius: 4px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--duration-color) var(--ease-translate);
+}
+.dp-close-btn:hover { color: var(--text-primary); }
+
+/* Status strip */
+.dp-status {
+  font-size: var(--font-size-sm);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--border-subtle);
+}
+.dp-status-active { color: var(--color-accent); font-weight: 600; }
+.dp-status-idle   { color: var(--text-tertiary); }
+
+/* Section label row */
+.dp-section-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: -4px;
+}
+.dp-section-value {
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Color swatches */
+.dp-colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dp-color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  min-height: unset;
+  min-width: unset;
+  transition: transform 0.12s var(--ease-translate), border-color 0.12s;
+  flex-shrink: 0;
+  outline: none;
+}
+.dp-color-swatch:hover               { transform: scale(1.18); }
+.dp-color-swatch.is-selected         { border-color: var(--color-accent); transform: scale(1.18); box-shadow: 0 0 0 2px var(--color-accent-glow); }
+/* Black swatch needs a visible ring against dark backgrounds */
+[data-theme='night'] .dp-color-swatch[style*='000000'].is-selected { border-color: #fff; }
+
+/* Custom colour picker */
+.dp-color-custom {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.dp-color-custom input[type='color'] {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+.dp-color-custom-swatch {
+  background-image: conic-gradient(
+    red, yellow, lime, cyan, blue, magenta, red
+  );
+}
+
+/* Brush size buttons */
+.dp-sizes {
+  display: flex;
+  gap: 4px;
+}
+
+.dp-size-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  padding: 7px 4px 5px;
+  min-height: 52px;
+  min-width: unset;
+  transition:
+    border-color var(--duration-color),
+    background var(--duration-color),
+    color var(--duration-color);
+}
+.dp-size-btn:hover { border-color: var(--color-accent); color: var(--text-primary); }
+.dp-size-btn.is-selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent-glow);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.dp-size-dot {
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  display: block;
+  min-width: 6px;
+}
+.dp-size-label {
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+/* Opacity row */
+.dp-opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dp-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-medium);
+  outline: none;
+  cursor: pointer;
+}
+.dp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--thumb-color, var(--color-accent));
+  border: 2px solid var(--surface-elevated);
+  box-shadow: 0 0 6px var(--color-accent-glow);
+  cursor: pointer;
+}
+.dp-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--thumb-color, var(--color-accent));
+  border: 2px solid var(--surface-elevated);
+  box-shadow: 0 0 6px var(--color-accent-glow);
+  cursor: pointer;
+}
+
+.dp-opacity-preview {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-medium);
+  flex-shrink: 0;
+  background: white; /* overridden by inline style */
+}
+
+/* Stroke action buttons */
+.dp-stroke-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dp-action-btn {
+  flex: 1;
+  border: 1.5px solid var(--border-medium);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  min-height: 36px;
+  min-width: unset;
+  padding: 0 8px;
+  transition: border-color var(--duration-color), color var(--duration-color), background var(--duration-color);
+}
+.dp-action-btn:hover:not(:disabled) { border-color: var(--color-accent); color: var(--text-primary); }
+.dp-action-btn:disabled             { opacity: 0.35; cursor: not-allowed; }
+
+.dp-action-btn-danger:hover:not(:disabled) {
+  border-color: var(--color-system-red);
+  color: var(--color-system-red);
+}
+
+/* Keyboard hint */
+.dp-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding-top: 2px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ============================================================
+   HUD ✏ Draw button extras
+   ============================================================ */
+.space-hud-draw-btn .draw-btn-icon { margin-right: 2px; }
+
+/* Glow ring around the button when drawing is live */
+.space-hud-draw-btn.is-active {
+  color: var(--color-accent);
+  text-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.space-hud-draw-btn.is-open {
+  font-weight: 700;
+}
+
+/* ============================================================
+   Finger Cursor overlay
+   ============================================================ */
+.finger-cursor-ring {
+  position: fixed;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2.5px solid;
+  pointer-events: none;
+  transition: border-color 0.08s, box-shadow 0.08s;
+}
+
+.finger-cursor-ring.is-drawing {
+  animation: finger-ring-pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes finger-ring-pulse {
+  from { transform: scale(1);    opacity: 1; }
+  to   { transform: scale(1.18); opacity: 0.7; }
+}
+
+.finger-cursor-dot {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.finger-trail-dot {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.finger-cursor-label {
+  position: fixed;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: rgba(0,0,0,0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+}

@@ -20,8 +20,21 @@ Private 3D / AR photo gallery that runs entirely in the browser. Photos never le
 | `Space` / `X` | Stop all motion |
 | `+` / `-` | Zoom |
 | `WASD` / arrows | Pan |
+| `Z` | Undo last drawing stroke |
 
 Add `?debug=1` for an on-screen FPS counter (also drives adaptive quality).
+
+## 3D Drawing mode
+
+Enable hand tracking (**🖐 Hands** button) then point your index finger at the screen while keeping your other three fingers curled. The recognizer enters draw mode and traces a 3D tube stroke at a fixed drawing plane 6 units in front of the camera.
+
+- **Start drawing** — extend index finger (others curled); a stroke begins immediately.
+- **Draw** — move your pointing hand; the tube follows in real time.
+- **Finish stroke** — curl the index finger, lower your hand, or let the 60-frame watchdog time out.
+- **Undo last stroke** — press `Z` on keyboard.
+- **Clear all drawings** — click the **✏ Clear** button that appears in the HUD whenever strokes exist. Drawings are session-only and cleared on reload (not saved to IndexedDB with the rest of the space — deferred decision).
+
+Grabbing a card (pinch) is fully independent of draw mode: `isPointing()` returns false whenever a pinch is active, so you can never accidentally start a stroke while dragging a photo.
 
 ## Stack
 

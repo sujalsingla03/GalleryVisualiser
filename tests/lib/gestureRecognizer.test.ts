@@ -337,3 +337,161 @@ describe('GestureRecognizer — hysteresis + reset', () => {
     expect(events.some((e) => e.type === 'pinchStart')).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Gesture disambiguation: point vs pinch / fist / swipe
+// ---------------------------------------------------------------------------
+// These are regression guards. The recognizer must NEVER classify one gesture
+// as another. Landmark sequences that are unambiguously one gesture must never
+// emit an event of a different type.
+
+import { isPointing } from '../../src/lib/gestureRecognizer';
+
+// Helper: build a 21-landmark hand from scratch with full control.
+function makeLandmarks(overrides: Partial<Record<number, { x: number; y: number; z: number }>>): HandLandmark[] {
+  const arr: HandLandmark[] = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+  for (const [k, v] of Object.entries(overrides)) {
+    arr[Number(k)] = v;
+  }
+  return arr;
+}
+
+/**
+ * "Pointing" hand: index extended (tip farther from wrist than PIP),
+ * middle / ring / pinky curled (tip closer to wrist than PIP).
+ * Wrist at (0.5, 0.9) — below. Tips above PIPs above wrist.
+ */
+function pointingLandmarks(): HandLandmark[] {
+  return makeLandmarks({
+    0:  { x: 0.5, y: 0.9, z: 0 },  // wrist (bottom)
+    // index extended: tip above PIP above wrist
+    6:  { x: 0.5, y: 0.5, z: 0 },  // index PIP  (mid)
+    8:  { x: 0.5, y: 0.1, z: 0 },  // index TIP  (far from wrist ✓)
+    // middle curled: tip BELOW pip (closer to wrist)
+    10: { x: 0.5, y: 0.4, z: 0 },  // middle PIP
+    12: { x: 0.5, y: 0.7, z: 0 },  // middle TIP (closer to wrist ✓)
+    // ring curled
+    14: { x: 0.5, y: 0.4, z: 0 },
+    16: { x: 0.5, y: 0.7, z: 0 },
+    // pinky curled
+    18: { x: 0.5, y: 0.4, z: 0 },
+    20: { x: 0.5, y: 0.7, z: 0 },
+  });
+}
+
+/**
+ * "Pinch" hand: index tip near thumb tip (landmark 4).
+ * Index tip and middle/ring/pinky tips are all near the thumb — effectively open
+ * from a distance standpoint, but the key is thumb↔index proximity.
+ * For disambiguation we just verify isPointing returns false when pinchActive=true.
+ */
+function pinchLandmarks(): HandLandmark[] {
+  // Extended index (would look like pointing) but pinchActive=true guards it.
+  return pointingLandmarks();
+}
+
+/**
+ * "Fist" hand: all four fingertips curl back toward the wrist.
+ */
+function fistLandmarks(): HandLandmark[] {
+  return makeLandmarks({
+    0:  { x: 0.5, y: 0.9, z: 0 },  // wrist
+    // All PIPs farther from wrist than tips → curled
+    6:  { x: 0.5, y: 0.4, z: 0 }, 8:  { x: 0.5, y: 0.7, z: 0 },  // index
+    10: { x: 0.5, y: 0.4, z: 0 }, 12: { x: 0.5, y: 0.7, z: 0 },  // middle
+    14: { x: 0.5, y: 0.4, z: 0 }, 16: { x: 0.5, y: 0.7, z: 0 },  // ring
+    18: { x: 0.5, y: 0.4, z: 0 }, 20: { x: 0.5, y: 0.7, z: 0 },  // pinky
+  });
+}
+
+/**
+ * "Open / swipe" hand: all four fingers extended.
+ */
+function openLandmarks(): HandLandmark[] {
+  return makeLandmarks({
+    0:  { x: 0.5, y: 0.9, z: 0 },
+    6:  { x: 0.5, y: 0.5, z: 0 }, 8:  { x: 0.5, y: 0.1, z: 0 },
+    10: { x: 0.5, y: 0.5, z: 0 }, 12: { x: 0.5, y: 0.1, z: 0 },
+    14: { x: 0.5, y: 0.5, z: 0 }, 16: { x: 0.5, y: 0.1, z: 0 },
+    18: { x: 0.5, y: 0.5, z: 0 }, 20: { x: 0.5, y: 0.1, z: 0 },
+  });
+}
+
+describe('isPointing — unit-level disambiguation', () => {
+  it('returns true for a pointing hand (index extended, others curled)', () => {
+    expect(isPointing(pointingLandmarks(), false)).toBe(true);
+  });
+
+  it('returns false when pinchActive=true regardless of finger pose', () => {
+    // This is the primary guard against draw-mode activating mid-grab.
+    expect(isPointing(pinchLandmarks(), true)).toBe(false);
+  });
+
+  it('returns false for a fist (all fingers curled)', () => {
+    expect(isPointing(fistLandmarks(), false)).toBe(false);
+  });
+
+  it('returns false for an open/swipe hand (all fingers extended)', () => {
+    // Open hand: middle/ring/pinky are also extended → not pointing.
+    expect(isPointing(openLandmarks(), false)).toBe(false);
+  });
+});
+
+describe('GestureRecognizer — drawStart / drawMove / drawEnd event sequence', () => {
+  it('emits drawStart when pointing begins', () => {
+    const r = new GestureRecognizer();
+    const hand: HandData = { landmarks: pointingLandmarks(), handedness: 'Right' };
+    const events = r.process(frame([hand]));
+    expect(events.some((e) => e.type === 'drawStart' && e.hand === 'Right')).toBe(true);
+  });
+
+  it('emits drawMove while pointing continues', () => {
+    const r = new GestureRecognizer();
+    const hand: HandData = { landmarks: pointingLandmarks(), handedness: 'Right' };
+    r.process(frame([hand]));
+    const events = r.process(frame([hand], 16));
+    expect(events.some((e) => e.type === 'drawMove' && e.hand === 'Right')).toBe(true);
+  });
+
+  it('emits drawEnd when pointing stops (finger curls)', () => {
+    const r = new GestureRecognizer();
+    r.process(frame([{ landmarks: pointingLandmarks(), handedness: 'Right' }]));
+    // Curl the index — fist-like
+    const events = r.process(frame([{ landmarks: fistLandmarks(), handedness: 'Right' }], 16));
+    expect(events.some((e) => e.type === 'drawEnd' && e.hand === 'Right')).toBe(true);
+  });
+
+  it('never emits drawStart while a pinch is active (no draw-during-grab)', () => {
+    const r = new GestureRecognizer();
+    // Start a pinch
+    r.process(frame([pinchedHand('Right')]));
+    expect(r.hasActiveGesture).toBe(true);
+    // Pointing landmarks but pinch is active
+    const hand: HandData = { landmarks: pointingLandmarks(), handedness: 'Right' };
+    // Keep thumb+index pinched
+    hand.landmarks[4] = { x: 0.5, y: 0.5, z: 0 };
+    hand.landmarks[8] = { x: 0.51, y: 0.51, z: 0 };
+    const events = r.process(frame([hand], 16));
+    expect(events.some((e) => e.type === 'drawStart')).toBe(false);
+  });
+
+  it('never emits pinchStart while pointing (no grab-during-draw)', () => {
+    const r = new GestureRecognizer();
+    // Establish draw mode
+    r.process(frame([{ landmarks: pointingLandmarks(), handedness: 'Right' }]));
+    // Next frame: still pointing (not pinching — thumb and index are far apart in pointingLandmarks)
+    const events = r.process(frame([{ landmarks: pointingLandmarks(), handedness: 'Right' }], 16));
+    expect(events.some((e) => e.type === 'pinchStart')).toBe(false);
+  });
+
+  it('emits drawEnd on watchdog timeout (hand disappears while drawing)', () => {
+    const r = new GestureRecognizer();
+    r.process(frame([{ landmarks: pointingLandmarks(), handedness: 'Right' }]));
+    // Drain enough empty frames to hit WATCHDOG_THRESHOLD (18)
+    const allEvents: ReturnType<typeof r.process>[number][] = [];
+    for (let i = 1; i <= 25; i++) {
+      allEvents.push(...r.process(frame([], i * 16)));
+    }
+    expect(allEvents.some((e) => e.type === 'drawEnd')).toBe(true);
+  });
+});

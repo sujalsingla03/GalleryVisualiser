@@ -139,9 +139,37 @@ export function isFist(landmarks: HandLandmark[]): boolean {
   return extendedFingerCount(landmarks) === 0;
 }
 
+/**
+ * "Pointing" — index finger extended, all other fingers curled.
+ *
+ * Disambiguation against existing gestures:
+ * - vs. pinch: pinch requires thumb↔index proximity; pointing keeps them apart.
+ * - vs. fist:  fist = 0 extended fingers; pointing = exactly 1 (index only).
+ * - vs. swipe: swipe requires ≥3 extended fingers; pointing = 1.
+ * - vs. open:  open has middle/ring/pinky also extended; pointing curls them.
+ *
+ * Implementation: index tip is extended (tip farther from wrist than PIP); middle,
+ * ring, and pinky are all curled (tip closer to wrist than PIP). We do NOT check
+ * the thumb because its tip-vs-PIP heuristic is unreliable across hand sizes.
+ * Guard: if a pinch is currently active for this hand, isPointing returns false so
+ * a grab never accidentally becomes a draw stroke.
+ */
+export function isPointing(landmarks: HandLandmark[], pinchActive: boolean): boolean {
+  if (pinchActive) return false;
+  const w = landmarks[WRIST];
+  // Index must be extended
+  if (dist2d(landmarks[INDEX_TIP], w) <= dist2d(landmarks[INDEX_PIP], w)) return false;
+  // Middle, ring, pinky must be curled
+  if (dist2d(landmarks[MIDDLE_TIP], w) > dist2d(landmarks[MIDDLE_PIP], w)) return false;
+  if (dist2d(landmarks[RING_TIP], w) > dist2d(landmarks[RING_PIP], w)) return false;
+  if (dist2d(landmarks[PINKY_TIP], w) > dist2d(landmarks[PINKY_PIP], w)) return false;
+  return true;
+}
+
 export interface HandSnapshot {
   present: boolean;
   pinching: boolean;
+  pointing: boolean;
   fist: boolean;
   pointer: { x: number; y: number };
   center: { x: number; y: number };
@@ -180,7 +208,19 @@ export type GestureEvent =
   | { type: 'twoHandMove'; distance: number; distanceDelta: number }
   | { type: 'twoHandTwist'; angleDelta: number }
   | { type: 'swipe'; hand: 'Left' | 'Right'; velocity: { x: number; y: number } }
-  | { type: 'fist'; hand: 'Left' | 'Right' };
+  | { type: 'fist'; hand: 'Left' | 'Right' }
+  | {
+      type: 'drawStart';
+      hand: 'Left' | 'Right';
+      /** Normalized image-space index-tip position (mirrored: x=0 is left of frame). */
+      pointer: { x: number; y: number };
+    }
+  | {
+      type: 'drawMove';
+      hand: 'Left' | 'Right';
+      pointer: { x: number; y: number };
+    }
+  | { type: 'drawEnd'; hand: 'Left' | 'Right' };
 
 interface PinchState {
   active: boolean;
@@ -222,6 +262,7 @@ function snapshotHand(hand: HandData, pinching: boolean): HandSnapshot {
   return {
     present: true,
     pinching,
+    pointing: isPointing(hand.landmarks, pinching),
     fist: isFist(hand.landmarks),
     pointer: indexTipPosition(hand.landmarks),
     center: handCenter(hand.landmarks),
@@ -255,6 +296,8 @@ export class GestureRecognizer {
   private swipeCooldownUntil = 0;
   /** Consecutive frames with zero hands while a pinch was active — forces release. */
   private emptyWhileActive = 0;
+  /** Per-hand draw-mode tracking. */
+  private drawActive: Record<'Left' | 'Right', boolean> = { Left: false, Right: false };
 
   /** Latest per-hand derived features — read this for continuous, mode-dependent control. */
   snapshot: FrameSnapshot = { Left: null, Right: null };
@@ -277,6 +320,7 @@ export class GestureRecognizer {
     this.wasFist = { Left: false, Right: false };
     this.swipeCooldownUntil = 0;
     this.emptyWhileActive = 0;
+    this.drawActive = { Left: false, Right: false };
     this.snapshot = { Left: null, Right: null };
   }
 
@@ -317,6 +361,15 @@ export class GestureRecognizer {
         watchdogMonitor.recordReset(this.emptyWhileActive);
         this.processHand('Left', undefined, this.leftPinch, events);
         this.processHand('Right', undefined, this.rightPinch, events);
+        // Also end any active draw strokes
+        if (this.drawActive.Left) {
+          this.drawActive.Left = false;
+          events.push({ type: 'drawEnd', hand: 'Left' });
+        }
+        if (this.drawActive.Right) {
+          this.drawActive.Right = false;
+          events.push({ type: 'drawEnd', hand: 'Right' });
+        }
         this.endZoom();
         this.endTwist();
         this.emptyWhileActive = 0;
@@ -346,6 +399,9 @@ export class GestureRecognizer {
 
     this.processFist('Left', left, events);
     this.processFist('Right', right, events);
+
+    this.processDrawing('Left', left, events);
+    this.processDrawing('Right', right, events);
 
     const bothPresent = !!left && !!right;
     const neitherPinching = !this.leftPinch.active && !this.rightPinch.active;
@@ -480,6 +536,27 @@ export class GestureRecognizer {
 
   private endTwist(): void {
     this.twoHandTwistActive = false;
+  }
+
+  private processDrawing(
+    handedness: 'Left' | 'Right',
+    hand: HandData | undefined,
+    events: GestureEvent[],
+  ): void {
+    const pinchState = handedness === 'Left' ? this.leftPinch : this.rightPinch;
+    const pointing = hand ? isPointing(hand.landmarks, pinchState.active) : false;
+
+    if (pointing && !this.drawActive[handedness]) {
+      this.drawActive[handedness] = true;
+      const ptr = indexTipPosition(hand!.landmarks);
+      events.push({ type: 'drawStart', hand: handedness, pointer: ptr });
+    } else if (pointing && this.drawActive[handedness]) {
+      const ptr = indexTipPosition(hand!.landmarks);
+      events.push({ type: 'drawMove', hand: handedness, pointer: ptr });
+    } else if (!pointing && this.drawActive[handedness]) {
+      this.drawActive[handedness] = false;
+      events.push({ type: 'drawEnd', hand: handedness });
+    }
   }
 
   private processSwipe(

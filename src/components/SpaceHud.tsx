@@ -7,8 +7,15 @@ import { useSpacePrefsStore } from '../store/spacePrefsStore';
 import { LAYOUT_MODE_LABELS } from '../lib/computeLayout';
 import { requestSnapshot } from '../lib/snapshotBridge';
 import { saveSpaceSession, clearSpaceSession } from '../lib/sessionStore';
+import { useDrawingStore } from '../store/drawingStore';
 
-export function SpaceHud() {
+export function SpaceHud({
+  onToggleDrawPanel,
+  drawPanelOpen,
+}: {
+  onToggleDrawPanel: () => void;
+  drawPanelOpen: boolean;
+}) {
   const setView = useViewStore((s) => s.setView);
   const triggerReset = useViewStore((s) => s.triggerReset);
   const photos = usePhotoStore((s) => s.photos);
@@ -30,6 +37,10 @@ export function SpaceHud() {
   const effectiveReducedMotion = useSpacePrefsStore((s) => s.effectiveReducedMotion);
   const qualityTier = useSpacePrefsStore((s) => s.qualityTier);
   const setQualityTier = useSpacePrefsStore((s) => s.setQualityTier);
+
+  const undoLastStroke  = useDrawingStore((s) => s.undoLast);
+  const drawingEnabled  = useDrawingStore((s) => s.drawingEnabled);
+  const toggleDrawing   = useDrawingStore((s) => s.toggleDrawing);
 
   const [toast, setToast] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
@@ -105,6 +116,19 @@ export function SpaceHud() {
         stopAllMotion();
         return;
       }
+      // Z — undo last drawing stroke (consistent with power-user key scheme: R/O/P/WASD/+/-)
+      if (lower === 'z' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        undoLastStroke();
+        return;
+      }
+      // D — toggle draw mode
+      if (lower === 'd' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        toggleDrawing();
+        onToggleDrawPanel();
+        return;
+      }
       if (key === '+' || key === '=') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('GallerySphere-zoom', { detail: -80 }));
@@ -134,7 +158,7 @@ export function SpaceHud() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [reshuffle, toggleAutoOrbit, stopAllMotion, onSnapshot]);
+  }, [reshuffle, toggleAutoOrbit, stopAllMotion, onSnapshot, undoLastStroke, toggleDrawing, onToggleDrawPanel]);
 
   const reduced = effectiveReducedMotion();
   const handsBroken = handStatus === 'error';
@@ -241,6 +265,23 @@ export function SpaceHud() {
             aria-label={`Quality ${qualityTier}`}
           >
             Q:{qualityTier[0].toUpperCase()}
+          </button>
+        </FrostPanel>
+        {/* ✏ Draw — opens the tool panel; tinted when drawing mode is on */}
+        <FrostPanel className="space-hud-chip">
+          <button
+            type="button"
+            className={`space-hud-btn space-hud-draw-btn${drawingEnabled ? ' is-active' : ''}${drawPanelOpen ? ' is-open' : ''}`}
+            onClick={onToggleDrawPanel}
+            aria-pressed={drawPanelOpen}
+            aria-label={drawPanelOpen ? 'Close drawing panel' : 'Open drawing panel'}
+            title="Drawing tools (D)"
+          >
+            <span className="draw-btn-icon">✏</span>
+            <span className="label-full">
+              {drawingEnabled ? ' Draw ●' : ' Draw'}
+            </span>
+            <span className="label-short">✏</span>
           </button>
         </FrostPanel>
         <FrostPanel className="space-hud-chip">
