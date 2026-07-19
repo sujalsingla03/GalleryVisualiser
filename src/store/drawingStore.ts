@@ -1,66 +1,68 @@
 /**
  * Drawing store — session-only stroke state.
  *
- * Intentionally NOT wired to IndexedDB / the "Save this space" feature.
- * Drawings are ephemeral: cleared on reload, exactly like the rest of the space.
+ * ## Performance architecture (Phase 1 fix)
+ *
+ * livePoints and isDrawing have been REMOVED from this store.
+ * Previously, appendPoint() called set({livePoints}) on every drawMove frame
+ * (~60 Hz), which:
+ *   - Allocated a new spread array every frame
+ *   - Notified ALL Zustand subscribers including DrawingLayer's store.subscribe()
+ *     which in turn allocated two new Set()s and two .map() arrays per frame
+ *
+ * Now: livePoints live entirely in a plain mutable useRef inside DrawingLayer.
+ * Zero Zustand writes during active drawing. The store is only written when a
+ * stroke is committed (drawEnd), undone, or cleared — events that happen at
+ * human-interaction frequency, not rAF frequency.
+ *
+ * The DrawingLayer store subscriber now uses a strokes-only equality selector
+ * so it fires only on actual structural changes (commit / undo / clear).
+ *
+ * isDrawing is exposed as a read-only signal via a Zustand atom only when it
+ * changes at start/end of stroke — not per-frame.
  *
  * Shape:
- *   drawingEnabled — master toggle; when false draw events are ignored entirely
- *   strokes        — completed strokes (finalised on drawEnd)
- *   livePoints     — points accumulated for the stroke currently being drawn
- *   isDrawing      — true while a drawStart has been received and drawEnd hasn't
+ *   drawingEnabled — master toggle
+ *   strokes        — completed strokes (written only on commit/undo/clear)
+ *   isDrawing      — true between beginStroke and commitStroke (UI feedback only)
  *   currentColor   — active brush color (CSS hex)
  *   currentRadius  — active tube radius in scene units
  *   currentOpacity — stroke opacity 0–1
  *
  * Actions:
- *   toggleDrawing — enable/disable draw mode
- *   beginStroke   — called on drawStart
- *   appendPoint   — called on drawMove (enforces point cap internally)
- *   commitStroke  — called on drawEnd (runs D-P simplification, moves live→strokes)
- *   undoLast      — removes the most-recent completed stroke
- *   clearAll      — removes every stroke (does NOT affect cards/layout)
- *   setColor      — change current brush color
- *   setRadius     — change current brush size
- *   setOpacity    — change current stroke opacity
+ *   toggleDrawing  — enable/disable draw mode
+ *   setDrawingEnabled
+ *   markDrawStart  — sets isDrawing=true (called by DrawingLayer on drawStart)
+ *   commitStroke   — accepts the finished, simplified points; sets isDrawing=false
+ *   undoLast       — removes most-recent completed stroke
+ *   clearAll       — removes every stroke
+ *   setColor / setRadius / setOpacity
  */
 
 import { create } from 'zustand';
 import { Vector3 } from 'three';
-import { douglasPeucker, enforcePointCap } from '../lib/strokeSimplify';
-
-/** Epsilon for Douglas-Peucker final simplification (scene units). */
-const DP_EPSILON = 0.03;
-
-/** Minimum points required to keep a stroke (avoid zero-length TubeGeometry). */
-const MIN_STROKE_POINTS = 2;
 
 export interface Stroke {
-  /** Unique id so React/Three can key on it. */
   id: string;
-  /** World-space points. Simplified on commit. */
   points: Vector3[];
-  /** Stroke colour as a CSS hex string. */
   color: string;
-  /** Tube radius in scene units. */
   radius: number;
-  /** Opacity 0–1. */
   opacity: number;
 }
 
 /** Preset color palette exposed to the drawing panel. */
 export const PALETTE_COLORS = [
-  '#ffffff', // white
-  '#f87171', // red
-  '#fb923c', // orange
-  '#fbbf24', // amber
-  '#a3e635', // lime
-  '#34d399', // emerald
-  '#22d3ee', // cyan
-  '#60a5fa', // blue
-  '#a78bfa', // violet
-  '#f472b6', // pink
-  '#000000', // black
+  '#ffffff',
+  '#f87171',
+  '#fb923c',
+  '#fbbf24',
+  '#a3e635',
+  '#34d399',
+  '#22d3ee',
+  '#60a5fa',
+  '#a78bfa',
+  '#f472b6',
+  '#000000',
 ] as const;
 
 /** Preset brush radii (scene units → tube radius). */
@@ -75,7 +77,7 @@ export const BRUSH_SIZES = [
 interface DrawingState {
   drawingEnabled: boolean;
   strokes: Stroke[];
-  livePoints: Vector3[];
+  /** True while a stroke is in progress — used only for UI feedback in DrawingPanel. */
   isDrawing: boolean;
   currentColor: string;
   currentRadius: number;
@@ -83,9 +85,14 @@ interface DrawingState {
 
   toggleDrawing: () => void;
   setDrawingEnabled: (enabled: boolean) => void;
-  beginStroke: (firstPoint: Vector3) => void;
-  appendPoint: (point: Vector3) => void;
-  commitStroke: () => void;
+  /** Called by DrawingLayer when a stroke starts — sets isDrawing flag for panel UI. */
+  markDrawStart: () => void;
+  /**
+   * Called by DrawingLayer when a stroke ends.
+   * Receives the already-simplified points so the store stays allocation-free.
+   * Returns the new Stroke id, or null if the stroke was too short to keep.
+   */
+  commitStroke: (points: Vector3[]) => string | null;
   undoLast: () => void;
   clearAll: () => void;
   setColor: (color: string) => void;
@@ -93,6 +100,7 @@ interface DrawingState {
   setOpacity: (opacity: number) => void;
 }
 
+const MIN_STROKE_POINTS = 2;
 let _nextId = 0;
 function nextId(): string {
   return `stroke-${++_nextId}`;
@@ -101,7 +109,6 @@ function nextId(): string {
 export const useDrawingStore = create<DrawingState>((set, get) => ({
   drawingEnabled: false,
   strokes: [],
-  livePoints: [],
   isDrawing: false,
   currentColor: '#ffffff',
   currentRadius: BRUSH_SIZES[1].value,
@@ -109,43 +116,32 @@ export const useDrawingStore = create<DrawingState>((set, get) => ({
 
   toggleDrawing: () => {
     const next = !get().drawingEnabled;
-    // When disabling mid-stroke, commit whatever is live.
     if (!next && get().isDrawing) {
-      get().commitStroke();
+      // Disabling mid-stroke — just mark done; DrawingLayer will discard live points
+      set({ isDrawing: false });
     }
     set({ drawingEnabled: next });
   },
 
   setDrawingEnabled: (enabled) => {
-    if (!enabled && get().isDrawing) get().commitStroke();
+    if (!enabled && get().isDrawing) set({ isDrawing: false });
     set({ drawingEnabled: enabled });
   },
 
-  beginStroke: (firstPoint) => {
-    set({ isDrawing: true, livePoints: [firstPoint] });
+  markDrawStart: () => {
+    set({ isDrawing: true });
   },
 
-  appendPoint: (point) => {
-    const raw = [...get().livePoints, point];
-    const capped = enforcePointCap(raw);
-    set({ livePoints: capped });
-  },
-
-  commitStroke: () => {
-    const { livePoints, strokes, currentColor, currentRadius, currentOpacity } = get();
-    const simplified = douglasPeucker(livePoints, DP_EPSILON);
-    if (simplified.length >= MIN_STROKE_POINTS) {
-      const stroke: Stroke = {
-        id: nextId(),
-        points: simplified,
-        color: currentColor,
-        radius: currentRadius,
-        opacity: currentOpacity,
-      };
-      set({ strokes: [...strokes, stroke], livePoints: [], isDrawing: false });
-    } else {
-      set({ livePoints: [], isDrawing: false });
+  commitStroke: (points) => {
+    if (points.length < MIN_STROKE_POINTS) {
+      set({ isDrawing: false });
+      return null;
     }
+    const { strokes, currentColor, currentRadius, currentOpacity } = get();
+    const id = nextId();
+    const stroke: Stroke = { id, points, color: currentColor, radius: currentRadius, opacity: currentOpacity };
+    set({ strokes: [...strokes, stroke], isDrawing: false });
+    return id;
   },
 
   undoLast: () => {
@@ -155,10 +151,10 @@ export const useDrawingStore = create<DrawingState>((set, get) => ({
   },
 
   clearAll: () => {
-    set({ strokes: [], livePoints: [], isDrawing: false });
+    set({ strokes: [], isDrawing: false });
   },
 
-  setColor: (color) => set({ currentColor: color }),
-  setRadius: (radius) => set({ currentRadius: radius }),
+  setColor:   (color)   => set({ currentColor: color }),
+  setRadius:  (radius)  => set({ currentRadius: radius }),
   setOpacity: (opacity) => set({ currentOpacity: Math.max(0.05, Math.min(1, opacity)) }),
 }));

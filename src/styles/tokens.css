@@ -1,95 +1,132 @@
 :root {
-  /* Palette — neutrals */
-  --color-black: #000000;
-  --color-grey-900: #0a0a0a;
-  --color-grey-800: #141414;
-  --color-grey-700: #2a2a2a;
-  --color-grey-600: #525252;
-  --color-grey-500: #6f6f6f;
-  --color-grey-400: #8a8a8a;
-  --color-grey-300: #b8b8b8;
-  --color-grey-200: #d9d9d9;
-  --color-grey-100: #ededed;
-  --color-grey-050: #f4f4f4;
-  --color-white: #ffffff;
+  /* ── Palette — neutrals ─────────────────────────────────────────────────── */
+  --color-black:      #000000;
+  --color-grey-900:   #0a0a0a;
+  --color-grey-800:   #141414;
+  --color-grey-700:   #2a2a2a;
+  --color-grey-600:   #525252;
+  --color-grey-500:   #6f6f6f;
+  --color-grey-400:   #8a8a8a;
+  --color-grey-300:   #b8b8b8;
+  --color-grey-200:   #d9d9d9;
+  --color-grey-100:   #ededed;
+  --color-grey-050:   #f4f4f4;
+  --color-white:      #ffffff;
 
-  /* GallerySphere accent — teal */
-  --color-accent: #0DDBB8;
-  --color-accent-glow: rgba(13, 219, 184, 0.55);
+  /* ── Accent — teal ──────────────────────────────────────────────────────── */
+  --color-accent:     #0DDBB8;
+  --color-accent-dim: rgba(13, 219, 184, 0.18);
+  --color-accent-glow:rgba(13, 219, 184, 0.55);
 
-  /* System status (utility only) */
+  /* ── Status ─────────────────────────────────────────────────────────────── */
   --color-system-blue:   #2f80ed;
   --color-system-green:  #27ae60;
   --color-system-orange: #f1913e;
   --color-system-red:    #eb5757;
 
-  /* Semantic tokens — LIGHT theme */
-  --surface-base: var(--color-grey-100);          /* page background */
-  --surface-elevated: var(--color-white);          /* cards / panels */
-  --surface-glass: rgba(255, 255, 255, 0.65);      /* frost panels */
-  --surface-overlay: rgba(20, 20, 20, 0.55);       /* lightbox backdrop */
-  --text-primary: var(--color-grey-700);
-  --text-secondary: var(--color-grey-600);
-  --text-tertiary: var(--color-grey-500);
-  --text-on-accent: var(--color-grey-700);
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --border-medium: rgba(0, 0, 0, 0.16);
+  /* ── Semantic surface / text / border — LIGHT (default) ─────────────────── */
+  --surface-base:     var(--color-grey-100);
+  --surface-elevated: var(--color-white);
+  --surface-glass:    rgba(255, 255, 255, 0.65);
+  --surface-overlay:  rgba(20, 20, 20, 0.55);
+  --text-primary:     var(--color-grey-700);
+  --text-secondary:   var(--color-grey-600);
+  --text-tertiary:    var(--color-grey-500);
+  --text-on-accent:   var(--color-grey-700);
+  --border-subtle:    rgba(0, 0, 0, 0.08);
+  --border-medium:    rgba(0, 0, 0, 0.16);
 
-  /* Typography */
-  --font-sans: "Geist Variable", system-ui, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
-  --font-size-hero-large: 64px;
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+  --font-sans:  "Geist Variable", system-ui, sans-serif;
+  --font-mono:  "Geist Mono Variable", ui-monospace, monospace;
+
+  /* Scale: hero / display / body / label / caption */
+  --font-size-hero-large:  64px;
   --font-size-hero-medium: 48px;
-  --font-size-hero-small: 24px;
-  --font-size-xxl: 1.5rem;
-  --font-size-xl: 1.25rem;
-  --font-size-lg: 1rem;
-  --font-size-md: 0.75rem;
-  --font-size-sm: 0.625rem;
+  --font-size-hero-small:  24px;
+  --font-size-xxl:  1.5rem;   /* 24px @ 16 base */
+  --font-size-xl:   1.25rem;  /* 20px */
+  --font-size-lg:   1rem;     /* 16px — body */
+  --font-size-md:   0.75rem;  /* 12px — HUD labels */
+  --font-size-sm:   0.625rem; /* 10px — captions / hints */
 
-  /* Motion */
+  /* ── Spacing scale (4-base) ─────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  /* A single ease-out-cubic used for all UI transitions (Phase 4). */
+  --ease-out:       cubic-bezier(0.16, 1, 0.3, 1);
+  /* Legacy: kept for backwards compat with existing landing animation. */
   --ease-translate: cubic-bezier(0.8, 0, 0.2, 1);
-  --duration-color: 0.2s;
 
-  /* Frost glass */
-  --frost-blur-light: 8px;
-  --frost-blur: 14px;
-  --frost-blur-heavy: 22px;
-  --frost-tint: var(--surface-glass);
-  --frost-contrast: 1.1;
-  --frost-brightness: 1.05;
+  --duration-fast:  0.12s;  /* button press, swatch hover */
+  --duration-base:  0.22s;  /* drawer open/close, toast enter */
+  --duration-slow:  0.36s;  /* theme transition */
+  --duration-color: 0.2s;   /* kept for backwards compat */
 
-  /* Radii */
-  --radius-button: 6px;
-  --radius-panel: 12px;
+  /* ── Frost glass ────────────────────────────────────────────────────────── */
+  --frost-blur-light:  8px;
+  --frost-blur:        14px;
+  --frost-blur-heavy:  22px;
+  --frost-tint:        var(--surface-glass);
+  --frost-contrast:    1.1;
+  --frost-brightness:  1.05;
+
+  /* ── Radii ───────────────────────────────────────────────────────────────── */
+  --radius-xs:     4px;   /* small inline elements: close btn, kbd hint */
+  --radius-sm:     6px;   /* buttons (was --radius-button) */
+  --radius-md:     8px;   /* drawing panel inner items, lightbox image */
+  --radius-lg:     12px;  /* panels (was --radius-panel) */
+  --radius-xl:     16px;  /* settings drawer */
+  --radius-full:   9999px;/* pills, toasts, circle buttons */
+
+  /* Legacy aliases — both still work */
+  --radius-button: var(--radius-sm);
+  --radius-panel:  var(--radius-lg);
+
+  /* ── Shadows ─────────────────────────────────────────────────────────────── */
+  --shadow-sm:  0 2px  8px rgba(0, 0, 0, 0.08);
+  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-lg:  0 8px 24px rgba(0, 0, 0, 0.14);
+  --shadow-xl:  0 20px 60px rgba(0, 0, 0, 0.18);
 }
 
-/* Gallery wall — warm light paper */
+/* ── Gallery wall — warm light paper ───────────────────────────────────────── */
 :root[data-theme='gallery'] {
-  --color-accent: #c45c26;
+  --color-accent:      #c45c26;
+  --color-accent-dim:  rgba(196, 92, 38, 0.12);
   --color-accent-glow: rgba(196, 92, 38, 0.45);
-  --surface-base: #f3efe6;
-  --surface-elevated: #fffcf7;
-  --surface-glass: rgba(255, 252, 247, 0.72);
-  --text-primary: #3a3228;
-  --text-secondary: #6a5e50;
-  --text-tertiary: #8a7c6c;
-  --text-on-accent: #fffaf4;
-  --border-subtle: rgba(58, 50, 40, 0.1);
-  --border-medium: rgba(58, 50, 40, 0.18);
+  --surface-base:      #f3efe6;
+  --surface-elevated:  #fffcf7;
+  --surface-glass:     rgba(255, 252, 247, 0.72);
+  --text-primary:      #3a3228;
+  --text-secondary:    #6a5e50;
+  --text-tertiary:     #8a7c6c;
+  --text-on-accent:    #fffaf4;
+  --border-subtle:     rgba(58, 50, 40, 0.10);
+  --border-medium:     rgba(58, 50, 40, 0.18);
 }
 
-/* Night — deep slate with mint accent */
+/* ── Night — deep slate with mint accent ────────────────────────────────────── */
 :root[data-theme='night'] {
-  --color-accent: #5eead4;
-  --color-accent-glow: rgba(94, 234, 212, 0.5);
-  --surface-base: #0f1419;
-  --surface-elevated: #1a222c;
-  --surface-glass: rgba(26, 34, 44, 0.72);
-  --text-primary: #e8eef4;
-  --text-secondary: #a8b4c0;
-  --text-tertiary: #7a8794;
-  --text-on-accent: #0f1419;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-medium: rgba(255, 255, 255, 0.16);
+  --color-accent:      #5eead4;
+  --color-accent-dim:  rgba(94, 234, 212, 0.12);
+  --color-accent-glow: rgba(94, 234, 212, 0.50);
+  --surface-base:      #0f1419;
+  --surface-elevated:  #1a222c;
+  --surface-glass:     rgba(26, 34, 44, 0.72);
+  --text-primary:      #e8eef4;
+  --text-secondary:    #a8b4c0;
+  --text-tertiary:     #7a8794;
+  --text-on-accent:    #0f1419;
+  --border-subtle:     rgba(255, 255, 255, 0.08);
+  --border-medium:     rgba(255, 255, 255, 0.16);
 }

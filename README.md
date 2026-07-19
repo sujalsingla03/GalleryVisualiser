@@ -10,7 +10,25 @@ Private 3D / AR photo gallery that runs entirely in the browser. Photos never le
 4. Drag to orbit · pinch to zoom · tap to open.
 5. HUD: Orbit, layouts (Cloud/Grid/Spiral/Wall/Sphere/Timeline), Mix, Stop, Shot, Save, theme, Motion, Quality, Hands.
 
-## Desktop shortcuts
+## Controls
+
+### HUD — primary bar (always visible)
+
+| Button | Action |
+|--------|--------|
+| ← New | Return to landing / load new photos |
+| ⊙ Reset | Snap camera back to initial framing |
+| ■ Stop | Kill all spin, orbit, and momentum |
+| 📷 Shot | Download a PNG snapshot |
+| ✏ Draw | Open/close the drawing tool palette |
+| 🤚 AR Gestures | Toggle webcam + hand-gesture control |
+| ⚙ Settings | Open/close the settings drawer |
+
+### HUD — settings drawer
+
+Orbit · Layout cycle · Mix (reshuffle) · Save (IndexedDB) · Clear saved · Theme · Motion toggle · Quality cycle · Photo count
+
+### Desktop keyboard shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -18,11 +36,12 @@ Private 3D / AR photo gallery that runs entirely in the browser. Photos never le
 | `O` | Toggle auto-orbit |
 | `P` | Snapshot PNG |
 | `Space` / `X` | Stop all motion |
-| `+` / `-` | Zoom |
-| `WASD` / arrows | Pan |
+| `D` | Toggle draw mode + open panel |
 | `Z` | Undo last drawing stroke |
+| `+` / `-` | Zoom in / out |
+| `WASD` / arrows | Pan camera |
 
-Add `?debug=1` for an on-screen FPS counter (also drives adaptive quality).
+Add `?debug=1` for an on-screen FPS overlay (landmark Hz, quality tier, matrix-miss counter).
 
 ## 3D Drawing mode
 

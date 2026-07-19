@@ -7,6 +7,7 @@ import { SpaceTips } from './SpaceTips';
 import { DrawingLayer, type DrawingLayerHandle } from './DrawingLayer';
 import { DrawingPanel } from './DrawingPanel';
 import { FingerCursor } from './FingerCursor';
+import { DrawFab } from './DrawFab';
 import type { PerspectiveCamera, Scene } from 'three';
 
 export function SpaceView() {
@@ -14,7 +15,7 @@ export function SpaceView() {
   const sceneContextRef  = useRef<SceneContextRef>({ scene: null, camera: null, canvas: null });
 
   const [sceneReady, setSceneReady]       = useState(false);
-  const [panelOpen,  setPanelOpen]        = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -55,6 +56,9 @@ export function SpaceView() {
 
       {/* Live finger-tip cursor overlay (hand-tracking only) */}
       <FingerCursor />
+
+      {/* Bottom-right corner draw FAB */}
+      <DrawFab onOpenPanel={() => setPanelOpen(true)} />
 
       {/* Pass setPanelOpen down so the HUD ✏ button can toggle the panel */}
       <SpaceHud
