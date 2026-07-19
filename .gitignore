@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# MediaPipe WASM is synced from node_modules on install (large binaries)
+public/mediapipe/wasm/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

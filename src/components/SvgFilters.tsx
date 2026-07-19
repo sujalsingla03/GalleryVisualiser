@@ -6,12 +6,12 @@ export function SvgFilters() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <filter id="tt-tooltip-outline">
+        <filter id="pinviz-tooltip-outline">
           <feDropShadow
             dx="0"
             dy="0"
             stdDeviation="8"
-            floodColor="#ECFF0F"
+            floodColor="#0DDBB8"
             floodOpacity="1"
             result="blur"
           />
@@ -21,7 +21,7 @@ export function SvgFilters() {
             values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 32 -1"
             result="outline"
           />
-          <feFlood floodColor="#ECFF0F" floodOpacity="1" result="offsetColor" />
+          <feFlood floodColor="#0DDBB8" floodOpacity="1" result="offsetColor" />
           <feComposite in="offsetColor" in2="outline" operator="in" result="offsetBlur" />
           <feBlend in="SourceGraphic" in2="offsetBlur" />
         </filter>

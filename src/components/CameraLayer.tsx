@@ -27,7 +27,10 @@ export function CameraLayer() {
     (async () => {
       try {
         setStatus('requesting-permission');
-        await handTracker.start();
+        await handTracker.start((phase) => {
+          if (cancelled) return;
+          setStatus(phase === 'camera' ? 'requesting-permission' : 'loading-model');
+        });
         if (cancelled) {
           handTracker.stop();
           return;

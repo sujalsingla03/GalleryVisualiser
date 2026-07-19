@@ -1,14 +1,17 @@
-import { HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 import type { HandFrame, HandLandmark } from './gestureRecognizer';
 
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+/** Same-origin assets — never load WASM/models from a CDN. */
+const WASM_BASE = `${import.meta.env.BASE_URL}mediapipe/wasm`;
+const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/hand_landmarker.task`;
+
+export type HandStartPhase = 'camera' | 'model';
 
 type FrameListener = (frame: HandFrame) => void;
 
 export class HandTracker {
-  private landmarker: HandLandmarker | null = null;
+  private landmarker: Awaited<
+    ReturnType<typeof import('@mediapipe/tasks-vision').HandLandmarker.createFromOptions>
+  > | null = null;
   private video: HTMLVideoElement | null = null;
   private stream: MediaStream | null = null;
   private listeners = new Set<FrameListener>();
@@ -18,14 +21,14 @@ export class HandTracker {
   /**
    * Start webcam + load MediaPipe model. Resolves once tracking is live.
    * Throws if webcam permission denied or model fails to load.
+   * MediaPipe is dynamically imported so the landing page stays lean.
    */
-  async start(): Promise<void> {
+  async start(onPhase?: (phase: HandStartPhase) => void): Promise<void> {
     if (this.running) return;
 
-    // 1. Webcam
-    // Higher resolution — the feed is now the full-screen AR background, not a thumbnail.
+    onPhase?.('camera');
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' },
       audio: false,
     });
     this.video = document.createElement('video');
@@ -34,7 +37,8 @@ export class HandTracker {
     this.video.playsInline = true;
     await this.video.play();
 
-    // 2. MediaPipe model
+    onPhase?.('model');
+    const { HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
     const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
     this.landmarker = await HandLandmarker.createFromOptions(fileset, {
       baseOptions: {
@@ -45,7 +49,6 @@ export class HandTracker {
       numHands: 2,
     });
 
-    // 3. Start frame loop
     this.running = true;
     this.tick();
   }
@@ -70,9 +73,6 @@ export class HandTracker {
     }
   }
 
-  /**
-   * Subscribe to landmark frames. Returns an unsubscribe function.
-   */
   onFrame(listener: FrameListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -80,10 +80,6 @@ export class HandTracker {
     };
   }
 
-  /**
-   * Returns the underlying <video> element so a preview can render it.
-   * Null if not started.
-   */
   getVideoElement(): HTMLVideoElement | null {
     return this.video;
   }
@@ -94,7 +90,6 @@ export class HandTracker {
       const result = this.landmarker.detectForVideo(this.video, performance.now());
 
       const hands = result.landmarks.map((landmarks, i) => ({
-        // Mirror x so movement matches user's mental model (their right hand → world's right side).
         landmarks: landmarks.map(
           (l) => ({ x: 1 - l.x, y: l.y, z: l.z }) as HandLandmark,
         ),

@@ -1,35 +1,41 @@
 # PinViz
 
-Drop a folder of photos and watch them float around you in a 3D AR space — the live webcam is the backdrop, and you arrange the photos with hand gestures (or mouse). Runs **entirely in your browser**: no sign-in, no uploads, no server. Your photos never leave your device.
+Drop photos into a private 3D AR space. The webcam is an optional backdrop; arrange shots with hand gestures or the mouse. Everything runs **in your browser** — no sign-in, no uploads, no third-party trackers. Photos never leave your device.
 
 ## Stack
 
 - React 19 + Vite + TypeScript
-- Three.js (raw — custom render pipeline with SMAA + OutlinePass over a transparent canvas)
-- Zustand for state
-- `@mediapipe/tasks-vision` (HandLandmarker) for webcam hand tracking — browser-side WASM + WebGL
-- Vercel for static hosting
+- Three.js (SMAA + outline over a transparent canvas)
+- Zustand
+- `@mediapipe/tasks-vision` — local WASM + model (same-origin, no CDN)
+- Vercel static hosting (optional)
 
-No backend. No database. No accounts.
+## Setup
 
-## Local development
+```bash
+npm install   # also syncs MediaPipe WASM into public/mediapipe
+npm run dev   # http://localhost:5173
+```
 
-1. Clone the repo.
-2. Install: `npm install`
-3. `npm run dev` → http://localhost:5173
+No environment variables. Camera stays **off** until you press **Hands** in the space view.
 
-That's it — there's nothing to configure.
+## Security
 
-## Deploy to Vercel
+- Hand-tracking WASM and model are served from `/mediapipe` (same origin)
+- No Discord / product promo links, analytics, or remote scripts
+- Deploy headers: CSP, `X-Frame-Options`, HSTS, Permissions-Policy (camera self-only)
+- Photos stay as in-memory blob URLs for the session only
 
-1. Push to GitHub.
-2. Import the repo at vercel.com/new.
-3. Deploy. Vercel auto-detects Vite and serves the static build. No environment variables needed.
+## Scripts
 
-Pushing to `main` auto-rebuilds the production deploy.
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Local dev server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview the build |
+| `npm test` | Unit tests (layout + gestures) |
+| `npm run sync:mediapipe` | Re-copy WASM / fetch model if missing |
 
-## How it works
+## Deploy
 
-Drop JPG/PNG/WebP files → they're decoded locally into WebGL textures and scattered in 3D. Turn on the camera (on by default) and the webcam fills the background while the photos float in front. Pinch-grab a photo to pull it close, resize it, and place it anywhere; swipe to spin the whole cloud; bring two hands together/apart to zoom. Everything is in-memory for the session — reload and you start fresh.
-
-Run `npm test` for the unit tests (layout + gesture recognizer).
+Push to GitHub and import on Vercel. No env vars. `postinstall` ensures MediaPipe assets are present before the build.

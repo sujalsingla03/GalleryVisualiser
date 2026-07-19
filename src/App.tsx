@@ -1,11 +1,12 @@
+import { lazy, Suspense } from 'react';
 import { SvgFilters } from './components/SvgFilters';
 import { LandingScreen } from './components/LandingScreen';
 import { ProcessingScreen } from './components/ProcessingScreen';
-import { SpaceScene } from './components/SpaceScene';
-import { SpaceHud } from './components/SpaceHud';
-import { PhotoLightbox } from './components/PhotoLightbox';
-import { CameraLayer } from './components/CameraLayer';
 import { useViewStore } from './store/viewStore';
+
+const SpaceView = lazy(() =>
+  import('./components/SpaceView').then((m) => ({ default: m.SpaceView })),
+);
 
 export default function App() {
   const view = useViewStore((s) => s.view);
@@ -16,12 +17,9 @@ export default function App() {
       {view === 'landing' && <LandingScreen />}
       {view === 'processing' && <ProcessingScreen />}
       {view === 'space' && (
-        <>
-          <CameraLayer />
-          <SpaceScene />
-          <SpaceHud />
-          <PhotoLightbox />
-        </>
+        <Suspense fallback={null}>
+          <SpaceView />
+        </Suspense>
       )}
     </>
   );

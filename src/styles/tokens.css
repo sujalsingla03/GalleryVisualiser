@@ -13,9 +13,9 @@
   --color-grey-050: #f4f4f4;
   --color-white: #ffffff;
 
-  /* Single accent — SOOT yellow */
-  --color-accent: #ECFF0F;
-  --color-accent-glow: rgba(236, 255, 15, 0.6);
+  /* PinViz accent — teal */
+  --color-accent: #0DDBB8;
+  --color-accent-glow: rgba(13, 219, 184, 0.55);
 
   /* System status (utility only) */
   --color-system-blue:   #2f80ed;

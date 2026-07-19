@@ -11,7 +11,8 @@ interface HandState {
 }
 
 export const useHandStore = create<HandState>((set) => ({
-  enabled: true,
+  // Camera + MediaPipe stay off until the user opts in (privacy + perf).
+  enabled: false,
   status: 'off',
   errorMessage: null,
   toggle: () => set((s) => ({ enabled: !s.enabled, errorMessage: null })),

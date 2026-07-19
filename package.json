@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sync:mediapipe": "node scripts/sync-mediapipe.mjs",
+    "postinstall": "node scripts/sync-mediapipe.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",

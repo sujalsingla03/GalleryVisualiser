@@ -1,12 +1,36 @@
 import { useCallback, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { FrostPanel } from './ui/FrostPanel';
-import { CommunityLinks } from './CommunityLinks';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { loadPhotoWithHash } from '../lib/loadPhoto';
 
 const ACCEPTED = /\.(jpe?g|png|webp)$/i;
+const DECODE_CONCURRENCY = 4;
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+  onItemDone?: (completed: number, total: number) => void,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  let completed = 0;
+
+  async function run(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i], i);
+      completed += 1;
+      onItemDone?.(completed, items.length);
+    }
+  }
+
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, () => run());
+  await Promise.all(runners);
+  return results;
+}
 
 export function LandingScreen() {
   const setView = useViewStore((s) => s.setView);
@@ -22,21 +46,31 @@ export function LandingScreen() {
       setProgress(0, jpgs.length);
       setView('processing');
 
-      const photos: Awaited<ReturnType<typeof loadPhotoWithHash>>['photo'][] = [];
+      type Loaded = Awaited<ReturnType<typeof loadPhotoWithHash>>;
+      const settled = await mapPool(
+        jpgs,
+        DECODE_CONCURRENCY,
+        async (file) => {
+          try {
+            return await loadPhotoWithHash(file);
+          } catch (err) {
+            console.warn(`Skipping ${file.name}:`, err);
+            return null;
+          }
+        },
+        (done, total) => setProgress(done, total),
+      );
+
+      const photos: Loaded['photo'][] = [];
       const accepted: File[] = [];
       const hashes: string[] = [];
-      for (let i = 0; i < jpgs.length; i++) {
-        try {
-          const { photo, contentHash } = await loadPhotoWithHash(jpgs[i]);
-          photos.push(photo);
-          accepted.push(jpgs[i]);
-          hashes.push(contentHash);
-        } catch (err) {
-          console.warn(`Skipping ${jpgs[i].name}:`, err);
-        }
-        setProgress(i + 1, jpgs.length);
+      for (let i = 0; i < settled.length; i++) {
+        const r = settled[i];
+        if (!r) continue;
+        photos.push(r.photo);
+        accepted.push(jpgs[i]);
+        hashes.push(r.contentHash);
       }
-
       setPhotos(photos, accepted, hashes);
       setView('space');
     },
@@ -63,36 +97,41 @@ export function LandingScreen() {
   );
 
   return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-8 px-6">
+    <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-8 px-6">
       <div className="flex flex-col items-center gap-3 text-center max-w-2xl">
-        <h1
+        <p
+          className="landing-brand"
           style={{
             fontSize: 'var(--font-size-hero-large)',
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
+            fontWeight: 700,
+            letterSpacing: '-0.03em',
+            color: 'var(--text-primary)',
           }}
         >
           PinViz
-        </h1>
+        </p>
         <p
           style={{
             fontSize: 'var(--font-size-lg)',
             color: 'var(--text-secondary)',
-            maxWidth: 520,
+            maxWidth: 480,
+            lineHeight: 1.5,
           }}
         >
-          Drop your trip photos and watch them come alive in a 3D space.
+          Your photos, floating in your space — private AR that never leaves this device.
         </p>
       </div>
 
       <FrostPanel
+        className="landing-drop"
         style={{
           width: 'min(560px, 90vw)',
           padding: '48px 32px',
           textAlign: 'center',
           borderStyle: 'dashed',
           borderColor: dragOver ? 'var(--color-accent)' : 'var(--border-medium)',
-          transition: `border-color var(--duration-color) var(--ease-translate)`,
+          transition: `border-color var(--duration-color) var(--ease-translate), transform var(--duration-color) var(--ease-translate)`,
+          transform: dragOver ? 'scale(1.01)' : 'scale(1)',
         }}
       >
         <label
@@ -118,7 +157,7 @@ export function LandingScreen() {
               marginBottom: 8,
             }}
           >
-            Drop your photos here
+            Drop photos here
           </div>
           <div
             style={{
@@ -127,13 +166,22 @@ export function LandingScreen() {
               lineHeight: 1.5,
             }}
           >
-            JPG, PNG, and WebP. Click to choose files. Works entirely in your browser —
-            your photos never leave your device.
+            JPG, PNG, or WebP. Click to browse. No accounts, no uploads, no network —
+            everything stays in memory on your machine.
           </div>
         </label>
       </FrostPanel>
 
-      <CommunityLinks style={{ marginTop: 24, gap: 16 }} />
+      <p
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--text-tertiary)',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+        }}
+      >
+        Local · Private · Offline-ready
+      </p>
     </div>
   );
 }

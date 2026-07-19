@@ -1,5 +1,4 @@
 import { FrostPanel } from './ui/FrostPanel';
-import { CommunityLinks } from './CommunityLinks';
 import { useViewStore } from '../store/viewStore';
 import { usePhotoStore } from '../store/photoStore';
 import { useHandStore } from '../store/handStore';
@@ -18,76 +17,76 @@ export function SpaceHud() {
   };
 
   return (
-    <>
-      <div
-        style={{
-          position: 'absolute',
-          top: 24,
-          left: 24,
-          zIndex: 10,
-          display: 'flex',
-          gap: 12,
-        }}
-      >
-        <FrostPanel style={{ padding: '8px 14px' }}>
-          <button
-            onClick={onClear}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-primary)',
-              fontSize: 'var(--font-size-md)',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-            }}
-          >
-            ← New space
-          </button>
-        </FrostPanel>
-        <FrostPanel style={{ padding: '8px 14px' }}>
-          <button
-            onClick={triggerReset}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-primary)',
-              fontSize: 'var(--font-size-md)',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-            }}
-          >
-            ⊙ Reset view
-          </button>
-        </FrostPanel>
-        <FrostPanel style={{ padding: '8px 14px' }}>
-          <button
-            onClick={toggleHand}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: handEnabled ? 'var(--color-accent)' : 'var(--text-primary)',
-              fontSize: 'var(--font-size-md)',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              fontWeight: handEnabled ? 600 : 400,
-            }}
-          >
-            🖐 Hands
-          </button>
-        </FrostPanel>
-        <FrostPanel style={{ padding: '8px 14px' }}>
-          <span
-            style={{
-              fontSize: 'var(--font-size-md)',
-              color: 'var(--text-secondary)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
-          </span>
-        </FrostPanel>
-      </div>
-      <CommunityLinks style={{ position: 'fixed', top: 24, right: 24, zIndex: 10 }} />
-    </>
+    <div
+      style={{
+        position: 'absolute',
+        top: 24,
+        left: 24,
+        zIndex: 10,
+        display: 'flex',
+        gap: 12,
+        flexWrap: 'wrap',
+        maxWidth: 'calc(100% - 48px)',
+      }}
+    >
+      <FrostPanel style={{ padding: '8px 14px' }}>
+        <button
+          onClick={onClear}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-primary)',
+            fontSize: 'var(--font-size-md)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}
+        >
+          ← New space
+        </button>
+      </FrostPanel>
+      <FrostPanel style={{ padding: '8px 14px' }}>
+        <button
+          onClick={triggerReset}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-primary)',
+            fontSize: 'var(--font-size-md)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+          }}
+        >
+          ⊙ Reset view
+        </button>
+      </FrostPanel>
+      <FrostPanel style={{ padding: '8px 14px' }}>
+        <button
+          onClick={toggleHand}
+          title={handEnabled ? 'Turn off camera & hand tracking' : 'Enable camera for AR + gestures'}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: handEnabled ? 'var(--color-accent)' : 'var(--text-primary)',
+            fontSize: 'var(--font-size-md)',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            fontWeight: handEnabled ? 600 : 400,
+          }}
+        >
+          {handEnabled ? '🖐 Hands on' : '🖐 Hands'}
+        </button>
+      </FrostPanel>
+      <FrostPanel style={{ padding: '8px 14px' }}>
+        <span
+          style={{
+            fontSize: 'var(--font-size-md)',
+            color: 'var(--text-secondary)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
+        </span>
+      </FrostPanel>
+    </div>
   );
 }

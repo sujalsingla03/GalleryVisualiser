@@ -2,7 +2,7 @@ import { Color, Vector2, type Object3D } from 'three';
 import { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import type { Scene, Camera } from 'three';
 
-const ACCENT_HEX = 0xecff0f;
+const ACCENT_HEX = 0x0ddbb8;
 
 export function createOutlinePass(scene: Scene, camera: Camera, w: number, h: number): OutlinePass {
   const pass = new OutlinePass(new Vector2(w, h), scene, camera);
