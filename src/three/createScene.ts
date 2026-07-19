@@ -10,6 +10,7 @@ import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import type { OutlinePass } from 'three/examples/jsm/postprocessing/OutlinePass.js';
 import { createOutlinePass } from './passes/outlinePassFactory';
+import { preferLowPowerMedia } from '../lib/device';
 
 export interface SceneBundle {
   scene: Scene;
@@ -22,6 +23,7 @@ export interface SceneBundle {
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneBundle {
+  const lowPower = preferLowPowerMedia();
   const scene = new Scene();
   // Transparent — the live webcam shows through behind the canvas (AR passthrough).
   scene.background = null;
@@ -29,8 +31,13 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   const camera = new PerspectiveCamera(45, 1, 0.1, 1000);
   camera.position.set(0, 0, 8);
 
-  const renderer = new WebGLRenderer({ canvas, antialias: false, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const renderer = new WebGLRenderer({
+    canvas,
+    antialias: false,
+    alpha: true,
+    powerPreference: lowPower ? 'low-power' : 'high-performance',
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, lowPower ? 1.5 : 2));
   renderer.setClearColor(0x000000, 0);
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
@@ -43,8 +50,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneBundle {
   const outline = createOutlinePass(scene, camera, window.innerWidth, window.innerHeight);
   composer.addPass(outline);
 
-  const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
-  composer.addPass(smaa);
+  // SMAA is expensive on phones — skip it when we prefer low power.
+  if (!lowPower) {
+    const smaa = new SMAAPass(window.innerWidth, window.innerHeight);
+    composer.addPass(smaa);
+  }
 
   composer.addPass(new OutputPass());
 

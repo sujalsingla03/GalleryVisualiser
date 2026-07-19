@@ -124,6 +124,35 @@ export function SpaceScene() {
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
+    // Mobile: two-finger pinch zoom (OrbitControls zoom is disabled for custom smoothing).
+    let pinchDist = 0;
+    const touchDistance = (touches: TouchList) => {
+      const a = touches[0];
+      const b = touches[1];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        pinchDist = touchDistance(e.touches);
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || pinchDist <= 0) return;
+      e.preventDefault();
+      const next = touchDistance(e.touches);
+      const ratio = next / pinchDist;
+      // Spread fingers → zoom in (negative deltaY); pinch together → zoom out.
+      performZoom((1 - ratio) * 90, 36);
+      pinchDist = next;
+    };
+    const onTouchEnd = () => {
+      pinchDist = 0;
+    };
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd);
+    canvas.addEventListener('touchcancel', onTouchEnd);
+
     // ----- Hand-gesture input (parallel to mouse) -----
     // performPan: shift camera + orbit target by the same world-space offset so
     // view direction is preserved (true parallel pan, no rotation).
@@ -336,9 +365,15 @@ export function SpaceScene() {
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointerup', onPointerUp);
 
-    const onResize = () => resize(window.innerWidth, window.innerHeight);
+    const onResize = () => {
+      const w = Math.round(window.visualViewport?.width ?? window.innerWidth);
+      const h = Math.round(window.visualViewport?.height ?? window.innerHeight);
+      resize(w, h);
+    };
     onResize();
     window.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('scroll', onResize);
 
     let raf = 0;
     const tick = () => {
@@ -406,13 +441,20 @@ export function SpaceScene() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onResize);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerleave', onPointerLeave);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchEnd);
       unsubFrames();
       unsubReset();
+      recognizer.reset();
       controlsBundle.dispose();
       cards.forEach((c) => c.dispose());
       bundle.dispose();
@@ -425,12 +467,15 @@ export function SpaceScene() {
       style={{
         position: 'fixed',
         inset: 0,
-        width: '100vw',
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         display: 'block',
         cursor: 'grab',
         zIndex: 1,
         background: 'transparent',
+        touchAction: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
       }}
     />
   );

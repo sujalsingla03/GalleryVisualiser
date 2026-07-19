@@ -17,73 +17,31 @@ export function SpaceHud() {
   };
 
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 24,
-        left: 24,
-        zIndex: 10,
-        display: 'flex',
-        gap: 12,
-        flexWrap: 'wrap',
-        maxWidth: 'calc(100% - 48px)',
-      }}
-    >
-      <FrostPanel style={{ padding: '8px 14px' }}>
-        <button
-          onClick={onClear}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-primary)',
-            fontSize: 'var(--font-size-md)',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-          }}
-        >
-          ← New space
+    <div className="space-hud">
+      <FrostPanel className="space-hud-chip">
+        <button type="button" className="space-hud-btn" onClick={onClear}>
+          <span className="label-full">← New space</span>
+          <span className="label-short">← New</span>
         </button>
       </FrostPanel>
-      <FrostPanel style={{ padding: '8px 14px' }}>
-        <button
-          onClick={triggerReset}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-primary)',
-            fontSize: 'var(--font-size-md)',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-          }}
-        >
-          ⊙ Reset view
+      <FrostPanel className="space-hud-chip">
+        <button type="button" className="space-hud-btn" onClick={triggerReset}>
+          <span className="label-full">⊙ Reset view</span>
+          <span className="label-short">⊙ Reset</span>
         </button>
       </FrostPanel>
-      <FrostPanel style={{ padding: '8px 14px' }}>
+      <FrostPanel className="space-hud-chip">
         <button
+          type="button"
+          className={`space-hud-btn${handEnabled ? ' is-active' : ''}`}
           onClick={toggleHand}
           title={handEnabled ? 'Turn off camera & hand tracking' : 'Enable camera for AR + gestures'}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: handEnabled ? 'var(--color-accent)' : 'var(--text-primary)',
-            fontSize: 'var(--font-size-md)',
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            fontWeight: handEnabled ? 600 : 400,
-          }}
         >
-          {handEnabled ? '🖐 Hands on' : '🖐 Hands'}
+          {handEnabled ? '🖐 On' : '🖐 Hands'}
         </button>
       </FrostPanel>
-      <FrostPanel style={{ padding: '8px 14px' }}>
-        <span
-          style={{
-            fontSize: 'var(--font-size-md)',
-            color: 'var(--text-secondary)',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
+      <FrostPanel className="space-hud-chip">
+        <span className="space-hud-count">
           {photos.length} {photos.length === 1 ? 'photo' : 'photos'}
         </span>
       </FrostPanel>

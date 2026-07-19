@@ -110,35 +110,22 @@ export function CameraLayer() {
       )}
 
       {enabled && status === 'active' && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 24,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
+        <div className="gesture-dock">
           {showHint && (
-            <FrostPanel style={{ padding: '12px 16px', maxWidth: 560 }}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'auto 1fr',
-                  gap: '6px 12px',
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--text-secondary)',
-                  lineHeight: 1.3,
-                }}
-              >
-                {GESTURES.map(([icon, label]) => (
+            <FrostPanel className="gesture-sheet">
+              <div className="gesture-grid">
+                {GESTURES_CORE.map(([icon, label]) => (
                   <Fragment key={label}>
                     <span style={{ whiteSpace: 'nowrap' }}>{icon}</span>
                     <span>{label}</span>
+                  </Fragment>
+                ))}
+                {GESTURES_ADVANCED.map(([icon, label]) => (
+                  <Fragment key={label}>
+                    <span className="gesture-advanced" style={{ whiteSpace: 'nowrap' }}>
+                      {icon}
+                    </span>
+                    <span className="gesture-advanced">{label}</span>
                   </Fragment>
                 ))}
               </div>
@@ -146,6 +133,7 @@ export function CameraLayer() {
           )}
           <FrostPanel style={{ padding: '6px 12px' }}>
             <button
+              type="button"
               onClick={() => setShowHint((v) => !v)}
               style={{
                 background: 'transparent',
@@ -155,9 +143,10 @@ export function CameraLayer() {
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
                 cursor: 'pointer',
+                minHeight: 40,
               }}
             >
-              {showHint ? '✕ Hide gestures' : '✋ Gestures'}
+              {showHint ? '✕ Hide' : '✋ Gestures'}
             </button>
           </FrostPanel>
         </div>
@@ -166,17 +155,20 @@ export function CameraLayer() {
   );
 }
 
-const GESTURES: [string, string][] = [
-  ['☝️ + 🤏', 'Point at a photo and pinch to grab it'],
-  ['↔', 'While holding: move your hand to reposition it'],
-  ['👋→📷', 'While holding: move your hand toward the camera to pull it closer'],
-  ['🤏 spread', 'While holding: thumb + middle finger to resize'],
-  ['🙌 two hands', 'While holding: spread both hands to resize larger'],
-  ['🌀 twist wrist', 'While holding: roll your wrist to rotate the photo'],
-  ['✐ let go', 'Release the pinch to drop it there'],
-  ['🤲 apart / together', 'Both open hands — zoom the whole space in / out'],
-  ['🔄 two-hand twist', 'Both pinched hands — turn the whole space'],
-  ['👋 swipe', 'Flick one open hand — spin the space'],
-  ['✊ fist', 'Make a fist — stop the spin'],
-  ['🤏 empty space', 'Pinch + drag where no photo is — pan the view'],
+const GESTURES_CORE: [string, string][] = [
+  ['☝️ + 🤏', 'Point + pinch to grab a photo'],
+  ['↔', 'Move hand to reposition'],
+  ['👋 closer', 'Move toward camera to pull closer'],
+  ['✐ release', 'Open fingers to drop'],
+  ['🤏 empty', 'Pinch empty space to pan'],
+  ['✊ fist', 'Fist to stop spin'],
+];
+
+const GESTURES_ADVANCED: [string, string][] = [
+  ['🤏 spread', 'Thumb + middle to resize'],
+  ['🙌 two hands', 'Two hands to scale larger'],
+  ['🌀 twist', 'Roll wrist to rotate photo'],
+  ['🤲 zoom', 'Open hands apart / together to zoom'],
+  ['🔄 twist both', 'Both pinched — turn the space'],
+  ['👋 swipe', 'Flick open hand to spin'],
 ];

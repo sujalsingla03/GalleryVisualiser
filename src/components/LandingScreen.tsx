@@ -97,42 +97,16 @@ export function LandingScreen() {
   );
 
   return (
-    <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-8 px-6">
-      <div className="flex flex-col items-center gap-3 text-center max-w-2xl">
-        <p
-          className="landing-brand"
-          style={{
-            fontSize: 'var(--font-size-hero-large)',
-            fontWeight: 700,
-            letterSpacing: '-0.03em',
-            color: 'var(--text-primary)',
-          }}
-        >
-          PinViz
-        </p>
-        <p
-          style={{
-            fontSize: 'var(--font-size-lg)',
-            color: 'var(--text-secondary)',
-            maxWidth: 480,
-            lineHeight: 1.5,
-          }}
-        >
+    <div className="landing-root w-full h-full flex flex-col items-center justify-center gap-6 sm:gap-8 px-4 sm:px-6">
+      <div className="flex flex-col items-center gap-2 sm:gap-3 text-center max-w-2xl">
+        <p className="landing-brand">PinViz</p>
+        <p className="landing-tagline">
           Your photos, floating in your space — private AR that never leaves this device.
         </p>
       </div>
 
       <FrostPanel
-        className="landing-drop"
-        style={{
-          width: 'min(560px, 90vw)',
-          padding: '48px 32px',
-          textAlign: 'center',
-          borderStyle: 'dashed',
-          borderColor: dragOver ? 'var(--color-accent)' : 'var(--border-medium)',
-          transition: `border-color var(--duration-color) var(--ease-translate), transform var(--duration-color) var(--ease-translate)`,
-          transform: dragOver ? 'scale(1.01)' : 'scale(1)',
-        }}
+        className={`landing-drop${dragOver ? ' is-dragover' : ''}`}
       >
         <label
           onDragOver={(e) => {
@@ -141,7 +115,7 @@ export function LandingScreen() {
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          style={{ display: 'block', cursor: 'pointer' }}
+          className="landing-drop-label"
         >
           <input
             type="file"
@@ -150,38 +124,17 @@ export function LandingScreen() {
             onChange={onPick}
             style={{ display: 'none' }}
           />
-          <div
-            style={{
-              fontSize: 'var(--font-size-xl)',
-              color: 'var(--text-primary)',
-              marginBottom: 8,
-            }}
-          >
-            Drop photos here
+          <div className="landing-drop-title">
+            <span className="landing-drop-desktop">Drop photos here</span>
+            <span className="landing-drop-mobile">Tap to add photos</span>
           </div>
-          <div
-            style={{
-              fontSize: 'var(--font-size-md)',
-              color: 'var(--text-tertiary)',
-              lineHeight: 1.5,
-            }}
-          >
-            JPG, PNG, or WebP. Click to browse. No accounts, no uploads, no network —
-            everything stays in memory on your machine.
+          <div className="landing-drop-hint">
+            JPG, PNG, or WebP. Works entirely on this device — nothing is uploaded.
           </div>
         </label>
       </FrostPanel>
 
-      <p
-        style={{
-          fontSize: 'var(--font-size-sm)',
-          color: 'var(--text-tertiary)',
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-        }}
-      >
-        Local · Private · Offline-ready
-      </p>
+      <p className="landing-badge">Local · Private · Offline-ready</p>
     </div>
   );
 }

@@ -16,7 +16,7 @@ export function setupControls(camera: Camera, dom: HTMLElement): ControlsBundle 
 
   controls.enableRotate = false;
   controls.enablePan = true;
-  controls.enableZoom = false; // smooth zoom is handled in SpaceScene
+  controls.enableZoom = false; // smooth zoom is handled in SpaceScene (wheel + pinch)
   controls.panSpeed = 1.0;
   controls.screenSpacePanning = true;
 
@@ -28,6 +28,7 @@ export function setupControls(camera: Camera, dom: HTMLElement): ControlsBundle 
     MIDDLE: MOUSE.PAN,
     RIGHT: MOUSE.PAN,
   };
+  // One-finger pan on mobile; two-finger zoom is custom in SpaceScene.
   controls.touches = {
     ONE: TOUCH.PAN,
     TWO: TOUCH.PAN,

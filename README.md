@@ -39,3 +39,9 @@ No environment variables. Camera stays **off** until you press **Hands** in the 
 ## Deploy
 
 Push to GitHub and import on Vercel. No env vars. `postinstall` ensures MediaPipe assets are present before the build.
+
+## Mobile
+
+- Tap to add photos; one-finger pan; two-finger pinch to zoom
+- HUD respects safe-area insets; gesture sheet shows core tips on small screens
+- On phones, camera runs at lower resolution, MediaPipe may skip frames, and SMAA is disabled for smoother AR

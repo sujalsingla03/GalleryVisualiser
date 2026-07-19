@@ -28,17 +28,20 @@ const PINKY_PIP = 18;
 const PINKY_MCP = 17;
 const WRIST = 0;
 
+/** Squared 3D distance — avoids Math.sqrt in hot pinch checks. */
+function dist3Sq(a: HandLandmark, b: HandLandmark): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const dz = a.z - b.z;
+  return dx * dx + dy * dy + dz * dz;
+}
+
 function dist2d(a: HandLandmark, b: HandLandmark): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 export function isPinching(landmarks: HandLandmark[], threshold: number): boolean {
-  const t = landmarks[THUMB_TIP];
-  const i = landmarks[INDEX_TIP];
-  const dx = t.x - i.x;
-  const dy = t.y - i.y;
-  const dz = t.z - i.z;
-  return dx * dx + dy * dy + dz * dz < threshold * threshold;
+  return dist3Sq(landmarks[THUMB_TIP], landmarks[INDEX_TIP]) < threshold * threshold;
 }
 
 export function pinchPosition(landmarks: HandLandmark[]): { x: number; y: number } {
@@ -142,28 +145,51 @@ export type GestureEvent =
       thumbMiddle: number;
     }
   | { type: 'pinchEnd'; hand: 'Left' | 'Right' }
-  // Both hands open and moving together/apart → zoom the whole photo cloud.
   | { type: 'twoHandMove'; distance: number; distanceDelta: number }
-  // Both hands pinched and rotating relative to each other → rotate the whole cloud.
   | { type: 'twoHandTwist'; angleDelta: number }
-  // A fast flick of a single open hand → impart spin to the photo cloud.
   | { type: 'swipe'; hand: 'Left' | 'Right'; velocity: { x: number; y: number } }
-  // A hand closing into a fist → brake all motion.
   | { type: 'fist'; hand: 'Left' | 'Right' };
 
 interface PinchState {
   active: boolean;
   pointer: { x: number; y: number } | null;
+  /** EMA-smoothed pointer for stable grab tracking. */
+  smooth: { x: number; y: number } | null;
 }
 
-const PINCH_THRESHOLD = 0.06;
-// Minimum per-frame hand travel (normalized) to count as a swipe rather than drift.
-const SWIPE_THRESHOLD = 0.035;
+/** Absolute enter/exit thresholds (normalized image space) — hysteresis kills flicker. */
+const PINCH_ENTER = 0.055;
+const PINCH_EXIT = 0.085;
+/** Palm-relative pinch: closer hands get a looser absolute threshold. */
+const PINCH_ENTER_PALM = 0.42;
+const PINCH_EXIT_PALM = 0.65;
+/** Ignore sub-pixel jitter in pinchMove (normalized). */
+const MOVE_DEADZONE = 0.0012;
+/** EMA blend for pinch pointer (higher = snappier). */
+const POINTER_SMOOTH = 0.42;
+/** Swipe: min speed in normalized units / second. */
+const SWIPE_SPEED = 1.15;
+/** Swipe cooldown after emit (ms). */
+const SWIPE_COOLDOWN_MS = 280;
+/** Require mostly-open hand for swipe (avoids grab/flick confusion). */
+const SWIPE_MIN_FINGERS = 3;
+/** Two-hand zoom/twist deadzones. */
+const ZOOM_DEADZONE = 0.002;
+const TWIST_DEADZONE = 0.008;
 
-function snapshotHand(hand: HandData): HandSnapshot {
+function pinchThresholds(landmarks: HandLandmark[]): { enter: number; exit: number } {
+  const palm = palmWidth(landmarks);
+  if (palm < 1e-4) return { enter: PINCH_ENTER, exit: PINCH_EXIT };
+  return {
+    enter: Math.max(PINCH_ENTER * 0.85, Math.min(PINCH_ENTER * 1.35, palm * PINCH_ENTER_PALM)),
+    exit: Math.max(PINCH_EXIT * 0.85, Math.min(PINCH_EXIT * 1.4, palm * PINCH_EXIT_PALM)),
+  };
+}
+
+function snapshotHand(hand: HandData, pinching: boolean): HandSnapshot {
   return {
     present: true,
-    pinching: isPinching(hand.landmarks, PINCH_THRESHOLD),
+    pinching,
     fist: isFist(hand.landmarks),
     pointer: indexTipPosition(hand.landmarks),
     center: handCenter(hand.landmarks),
@@ -174,9 +200,16 @@ function snapshotHand(hand: HandData): HandSnapshot {
   };
 }
 
+function shortestAngleDelta(from: number, to: number): number {
+  let d = to - from;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
 export class GestureRecognizer {
-  private leftPinch: PinchState = { active: false, pointer: null };
-  private rightPinch: PinchState = { active: false, pointer: null };
+  private leftPinch: PinchState = { active: false, pointer: null, smooth: null };
+  private rightPinch: PinchState = { active: false, pointer: null, smooth: null };
   private twoHandZoomActive = false;
   private twoHandLastDistance = 0;
   private twoHandTwistActive = false;
@@ -185,24 +218,44 @@ export class GestureRecognizer {
     Left: null,
     Right: null,
   };
+  private lastTimestamp = 0;
   private wasFist: Record<'Left' | 'Right', boolean> = { Left: false, Right: false };
+  private swipeCooldownUntil = 0;
 
   /** Latest per-hand derived features — read this for continuous, mode-dependent control. */
   snapshot: FrameSnapshot = { Left: null, Right: null };
 
+  /** Clear all gesture state (call when the camera stops). */
+  reset(): void {
+    this.leftPinch = { active: false, pointer: null, smooth: null };
+    this.rightPinch = { active: false, pointer: null, smooth: null };
+    this.twoHandZoomActive = false;
+    this.twoHandLastDistance = 0;
+    this.twoHandTwistActive = false;
+    this.twoHandLastAngle = 0;
+    this.lastCenter = { Left: null, Right: null };
+    this.lastTimestamp = 0;
+    this.wasFist = { Left: false, Right: false };
+    this.swipeCooldownUntil = 0;
+    this.snapshot = { Left: null, Right: null };
+  }
+
   process(frame: HandFrame): GestureEvent[] {
     const events: GestureEvent[] = [];
+    const dtMs = this.lastTimestamp > 0 ? Math.max(1, frame.timestamp - this.lastTimestamp) : 16.67;
+    this.lastTimestamp = frame.timestamp;
 
     const left = frame.hands.find((h) => h.handedness === 'Left');
     const right = frame.hands.find((h) => h.handedness === 'Right');
 
-    this.snapshot = {
-      Left: left ? snapshotHand(left) : null,
-      Right: right ? snapshotHand(right) : null,
-    };
-
     this.processHand('Left', left, this.leftPinch, events);
     this.processHand('Right', right, this.rightPinch, events);
+
+    this.snapshot = {
+      Left: left ? snapshotHand(left, this.leftPinch.active) : null,
+      Right: right ? snapshotHand(right, this.rightPinch.active) : null,
+    };
+
     this.processFist('Left', left, events);
     this.processFist('Right', right, events);
 
@@ -219,8 +272,8 @@ export class GestureRecognizer {
     } else {
       this.endZoom();
       this.endTwist();
-      this.processSwipe('Left', left, this.leftPinch, events);
-      this.processSwipe('Right', right, this.rightPinch, events);
+      this.processSwipe('Left', left, this.leftPinch, dtMs, frame.timestamp, events);
+      this.processSwipe('Right', right, this.rightPinch, dtMs, frame.timestamp, events);
     }
 
     this.lastCenter.Left = left ? handCenter(left.landmarks) : null;
@@ -235,39 +288,59 @@ export class GestureRecognizer {
     state: PinchState,
     events: GestureEvent[],
   ): void {
-    const pinching = hand ? isPinching(hand.landmarks, PINCH_THRESHOLD) : false;
-    const pointer = hand && pinching ? indexTipPosition(hand.landmarks) : null;
+    if (!hand) {
+      if (state.active) {
+        events.push({ type: 'pinchEnd', hand: handedness });
+        state.active = false;
+        state.pointer = null;
+        state.smooth = null;
+      }
+      return;
+    }
+
+    const { enter, exit } = pinchThresholds(hand.landmarks);
+    const spread3 = Math.sqrt(dist3Sq(hand.landmarks[THUMB_TIP], hand.landmarks[INDEX_TIP]));
+    const pinching = state.active ? spread3 < exit : spread3 < enter;
+    const rawPointer = pinching ? indexTipPosition(hand.landmarks) : null;
 
     if (pinching && !state.active) {
+      state.smooth = { x: rawPointer!.x, y: rawPointer!.y };
       events.push({
         type: 'pinchStart',
         hand: handedness,
-        pointer: pointer!,
-        spread: pinchSpread(hand!.landmarks),
-        span: palmWidth(hand!.landmarks),
-        roll: handRoll(hand!.landmarks),
-        thumbMiddle: thumbMiddleDistance(hand!.landmarks),
+        pointer: { x: rawPointer!.x, y: rawPointer!.y },
+        spread: pinchSpread(hand.landmarks),
+        span: palmWidth(hand.landmarks),
+        roll: handRoll(hand.landmarks),
+        thumbMiddle: thumbMiddleDistance(hand.landmarks),
       });
       state.active = true;
-      state.pointer = pointer;
-    } else if (pinching && state.active) {
+      state.pointer = { x: rawPointer!.x, y: rawPointer!.y };
+    } else if (pinching && state.active && rawPointer) {
+      const s = state.smooth!;
+      s.x += (rawPointer.x - s.x) * POINTER_SMOOTH;
+      s.y += (rawPointer.y - s.y) * POINTER_SMOOTH;
       const last = state.pointer!;
-      const delta = { x: pointer!.x - last.x, y: pointer!.y - last.y };
-      events.push({
-        type: 'pinchMove',
-        hand: handedness,
-        pointer: pointer!,
-        delta,
-        spread: pinchSpread(hand!.landmarks),
-        span: palmWidth(hand!.landmarks),
-        roll: handRoll(hand!.landmarks),
-        thumbMiddle: thumbMiddleDistance(hand!.landmarks),
-      });
-      state.pointer = pointer;
+      const dx = s.x - last.x;
+      const dy = s.y - last.y;
+      if (dx * dx + dy * dy >= MOVE_DEADZONE * MOVE_DEADZONE) {
+        events.push({
+          type: 'pinchMove',
+          hand: handedness,
+          pointer: { x: s.x, y: s.y },
+          delta: { x: dx, y: dy },
+          spread: pinchSpread(hand.landmarks),
+          span: palmWidth(hand.landmarks),
+          roll: handRoll(hand.landmarks),
+          thumbMiddle: thumbMiddleDistance(hand.landmarks),
+        });
+        state.pointer = { x: s.x, y: s.y };
+      }
     } else if (!pinching && state.active) {
       events.push({ type: 'pinchEnd', hand: handedness });
       state.active = false;
       state.pointer = null;
+      state.smooth = null;
     }
   }
 
@@ -291,8 +364,10 @@ export class GestureRecognizer {
       return;
     }
     const distanceDelta = distance - this.twoHandLastDistance;
-    events.push({ type: 'twoHandMove', distance, distanceDelta });
-    this.twoHandLastDistance = distance;
+    if (Math.abs(distanceDelta) >= ZOOM_DEADZONE) {
+      events.push({ type: 'twoHandMove', distance, distanceDelta });
+      this.twoHandLastDistance = distance;
+    }
   }
 
   private processTwoHandTwist(left: HandData, right: HandData, events: GestureEvent[]): void {
@@ -304,12 +379,11 @@ export class GestureRecognizer {
       this.twoHandLastAngle = angle;
       return;
     }
-    // Shortest signed angular difference.
-    let angleDelta = angle - this.twoHandLastAngle;
-    while (angleDelta > Math.PI) angleDelta -= 2 * Math.PI;
-    while (angleDelta < -Math.PI) angleDelta += 2 * Math.PI;
-    events.push({ type: 'twoHandTwist', angleDelta });
-    this.twoHandLastAngle = angle;
+    const angleDelta = shortestAngleDelta(this.twoHandLastAngle, angle);
+    if (Math.abs(angleDelta) >= TWIST_DEADZONE) {
+      events.push({ type: 'twoHandTwist', angleDelta });
+      this.twoHandLastAngle = angle;
+    }
   }
 
   private endZoom(): void {
@@ -324,16 +398,29 @@ export class GestureRecognizer {
     handedness: 'Left' | 'Right',
     hand: HandData | undefined,
     state: PinchState,
+    dtMs: number,
+    now: number,
     events: GestureEvent[],
   ): void {
     if (!hand || state.active || isFist(hand.landmarks)) return;
+    if (extendedFingerCount(hand.landmarks) < SWIPE_MIN_FINGERS) return;
+    if (now < this.swipeCooldownUntil) return;
+
     const last = this.lastCenter[handedness];
     if (!last) return;
+
     const center = handCenter(hand.landmarks);
-    const vx = center.x - last.x;
-    const vy = center.y - last.y;
-    if (Math.hypot(vx, vy) >= SWIPE_THRESHOLD) {
-      events.push({ type: 'swipe', hand: handedness, velocity: { x: vx, y: vy } });
+    const vx = (center.x - last.x) / (dtMs / 1000);
+    const vy = (center.y - last.y) / (dtMs / 1000);
+    const speed = Math.hypot(vx, vy);
+    if (speed >= SWIPE_SPEED) {
+      // Emit frame-delta velocity (matches previous consumer scale expectations).
+      events.push({
+        type: 'swipe',
+        hand: handedness,
+        velocity: { x: center.x - last.x, y: center.y - last.y },
+      });
+      this.swipeCooldownUntil = now + SWIPE_COOLDOWN_MS;
     }
   }
 }

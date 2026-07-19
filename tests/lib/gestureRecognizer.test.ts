@@ -95,9 +95,20 @@ function pinchedHand(handedness: 'Left' | 'Right', x = 0.5, y = 0.5): HandData {
 
 function openHand(handedness: 'Left' | 'Right', x = 0.5, y = 0.5): HandData {
   const landmarks = landmarksWithThumbIndex({ x, y }, { x: x + 0.2, y });
+  landmarks[0] = { x, y: y + 0.25, z: 0 }; // wrist
   landmarks[5] = { x: x - 0.05, y, z: 0 };
   landmarks[9] = { x, y, z: 0 };
   landmarks[17] = { x: x + 0.05, y, z: 0 };
+  // Extended fingers: tips farther from wrist than PIPs.
+  for (const [tip, pip, ox] of [
+    [8, 6, 0.2],
+    [12, 10, 0.18],
+    [16, 14, 0.16],
+    [20, 18, 0.14],
+  ] as const) {
+    landmarks[pip] = { x: x + ox * 0.4, y: y - 0.05, z: 0 };
+    landmarks[tip] = { x: x + ox, y: y - 0.18, z: 0 };
+  }
   return { landmarks, handedness };
 }
 
@@ -142,8 +153,9 @@ describe('GestureRecognizer — single-hand pinch state machine', () => {
     expect(move).toBeDefined();
     if (move && move.type === 'pinchMove') {
       expect(move.hand).toBe('Right');
-      expect(move.delta.x).toBeCloseTo(0.1, 2);
-      expect(move.delta.y).toBeCloseTo(0, 2);
+      // Pointer is EMA-smoothed — expect a positive step toward the new position.
+      expect(move.delta.x).toBeGreaterThan(0.02);
+      expect(Math.abs(move.delta.y)).toBeLessThan(0.02);
     }
   });
 
@@ -291,5 +303,30 @@ describe('GestureRecognizer — snapshot', () => {
     expect(r.snapshot.Left).toBeNull();
     expect(r.snapshot.Right!.pinching).toBe(true);
     expect(r.snapshot.Right!.present).toBe(true);
+  });
+});
+
+describe('GestureRecognizer — hysteresis + reset', () => {
+  it('keeps pinch active through small open jitter (exit hysteresis)', () => {
+    const r = new GestureRecognizer();
+    r.process(frame([pinchedHand('Right', 0.5, 0.5)]));
+    // Slightly open but still under exit threshold (~0.085).
+    const soft = landmarksWithThumbIndex({ x: 0.5, y: 0.5 }, { x: 0.57, y: 0.5 });
+    soft[5] = { x: 0.45, y: 0.5, z: 0 };
+    soft[9] = { x: 0.5, y: 0.5, z: 0 };
+    soft[17] = { x: 0.55, y: 0.5, z: 0 };
+    const events = r.process(frame([{ landmarks: soft, handedness: 'Right' }], 16));
+    expect(events.some((e) => e.type === 'pinchEnd')).toBe(false);
+    expect(r.snapshot.Right!.pinching).toBe(true);
+  });
+
+  it('reset() clears active pinch state', () => {
+    const r = new GestureRecognizer();
+    r.process(frame([pinchedHand('Right')]));
+    expect(r.snapshot.Right!.pinching).toBe(true);
+    r.reset();
+    expect(r.snapshot.Right).toBeNull();
+    const events = r.process(frame([pinchedHand('Right')], 32));
+    expect(events.some((e) => e.type === 'pinchStart')).toBe(true);
   });
 });
