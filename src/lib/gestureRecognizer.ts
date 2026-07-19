@@ -1,3 +1,35 @@
+import { isDebugQuery } from './motion';
+
+// ---------------------------------------------------------------------------
+// [DEBUG] Watchdog reset frequency monitor (Diagnostic 3)
+// Tracks how often the tracking-loss watchdog fires and logs resets-per-minute.
+// Only active when ?debug=1.
+// ---------------------------------------------------------------------------
+class WatchdogMonitor {
+  private enabled: boolean;
+  private resets: number[] = [];
+
+  constructor() {
+    this.enabled = isDebugQuery();
+  }
+
+  recordReset(elapsedFramesSinceLastLandmark: number): void {
+    if (!this.enabled) return;
+    const now = performance.now();
+    this.resets.push(now);
+    // Purge entries older than 60 s
+    const cutoff = now - 60_000;
+    this.resets = this.resets.filter((t) => t >= cutoff);
+    console.warn(
+      `[DEBUG][Watchdog] FORCE-RESET fired at ${now.toFixed(0)} ms` +
+        ` | frames-since-last-landmark=${elapsedFramesSinceLastLandmark}` +
+        ` | resets-in-last-60s=${this.resets.length}`,
+    );
+  }
+}
+
+export const watchdogMonitor = new WatchdogMonitor();
+
 export interface HandLandmark {
   x: number;
   y: number;
@@ -256,11 +288,33 @@ export class GestureRecognizer {
     const left = frame.hands.find((h) => h.handedness === 'Left');
     const right = frame.hands.find((h) => h.handedness === 'Right');
 
-    // Watchdog: if tracking drops while a pinch is active for several frames, force pinchEnd.
+    // ---- Tracking-loss tolerance ----
+    // MediaPipe routinely drops detections for 3–8 consecutive frames during fast hand
+    // motion (GPU dispatch latency, motion blur). Firing pinchEnd on the first empty frame
+    // causes the held card to drop mid-drag.
+    //
+    // Strategy:
+    // - While a pinch is active and ALL hands vanish, accumulate emptyWhileActive.
+    // - For the first JITTER_TOLERANCE frames, skip processHand (suppress pinchEnd).
+    //   The last known landmark positions are retained in the snapshot.
+    // - After JITTER_TOLERANCE frames the hand is treated as gone: processHand fires
+    //   pinchEnd through the normal path.
+    // - The watchdog (WATCHDOG_THRESHOLD) is a separate backstop that clears any lingering
+    //   state that processHand might have missed (e.g. partial-hand frames).
+    //
+    // JITTER_TOLERANCE = 4 frames ≈ 67 ms at 60 Hz — enough to bridge normal detection gaps
+    //   while keeping card drop latency low for intentional releases.
+    // WATCHDOG_THRESHOLD = 18 frames ≈ 300 ms at 60 Hz — belt-and-suspenders cleanup.
+    const JITTER_TOLERANCE = 4;
+    const WATCHDOG_THRESHOLD = 18;
+
     const anyActive = this.leftPinch.active || this.rightPinch.active;
     if (frame.hands.length === 0 && anyActive) {
       this.emptyWhileActive += 1;
-      if (this.emptyWhileActive >= 8) {
+
+      if (this.emptyWhileActive >= WATCHDOG_THRESHOLD) {
+        // [DEBUG] Diagnostic 3 — log watchdog reset with elapsed-frames evidence
+        watchdogMonitor.recordReset(this.emptyWhileActive);
         this.processHand('Left', undefined, this.leftPinch, events);
         this.processHand('Right', undefined, this.rightPinch, events);
         this.endZoom();
@@ -269,6 +323,15 @@ export class GestureRecognizer {
         this.snapshot = { Left: null, Right: null };
         return events;
       }
+
+      if (this.emptyWhileActive <= JITTER_TOLERANCE) {
+        // Within the tolerance window: hold off pinchEnd, keep last snapshot, skip gesture
+        // processing entirely for this frame. The card stays wherever it was.
+        return events;
+      }
+
+      // emptyWhileActive > JITTER_TOLERANCE but < WATCHDOG_THRESHOLD:
+      // treat the hand as gone — processHand will fire pinchEnd below.
     } else {
       this.emptyWhileActive = 0;
     }

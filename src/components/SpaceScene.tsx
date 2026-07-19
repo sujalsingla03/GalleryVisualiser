@@ -13,7 +13,7 @@ import { createPhotoCard, type PhotoCard } from '../three/createPhotoCard';
 import { setupControls } from '../three/orbitControlsFactory';
 import { computeLayout } from '../lib/computeLayout';
 import { usePhotoStore } from '../store/photoStore';
-import { handTracker } from '../lib/handTracking';
+import { handTracker, landmarkRateMonitor } from '../lib/handTracking';
 import { GestureRecognizer, type FrameSnapshot } from '../lib/gestureRecognizer';
 import { useViewStore } from '../store/viewStore';
 import { useSpacePrefsStore } from '../store/spacePrefsStore';
@@ -389,6 +389,36 @@ export function SpaceScene() {
 
             // 4. Roll — twist the wrist to rotate the photo in its plane.
             rollAngles.set(card, held.baseRoll + (ev.roll - held.grabRoll));
+
+            // Fix A1 — matrix seam: update the card's local matrix HERE, in the same
+            // callback tick as the position/scale/roll write. With matrixAutoUpdate=false,
+            // Three.js will never do this automatically; without it, card.group.matrix is
+            // stale until the next render tick's updateMatrix() call — typically 1–3 frames
+            // later, which is why the card visually lags or appears frozen.
+            // We must replicate the render tick's quaternion logic (billboard + roll) so the
+            // matrix is fully consistent: position ✓, scale ✓, quaternion(camera)+roll ✓.
+            card.group.quaternion.copy(camera.quaternion);
+            const immediateRoll = rollAngles.get(card);
+            if (immediateRoll) card.group.rotateZ(immediateRoll);
+            card.group.updateMatrix();
+
+            // [DEBUG] Diagnostic 2 — after the explicit updateMatrix() above, this counter
+            // should now stay at 0 during normal dragging (matrix is always fresh).
+            if (debugMode) {
+              const matrixAutoUpdateOff = !card.group.matrixAutoUpdate;
+              const worldFlagSet = card.group.matrixWorldNeedsUpdate;
+              if (matrixAutoUpdateOff && !worldFlagSet) {
+                debugMatrixMissCount++;
+                if (debugMatrixMissCount <= 3 || debugMatrixMissCount % 60 === 0) {
+                  console.warn(
+                    `[DEBUG][Matrix] pinchMove position write on card="${card.photoId}"` +
+                      ` — matrixAutoUpdate=false AND matrixWorldNeedsUpdate=false.` +
+                      ` Local matrix is STALE until next tick's updateMatrix() call.` +
+                      ` Miss count=${debugMatrixMissCount}`,
+                  );
+                }
+              }
+            }
           } else if (panHand === ev.hand) {
             performPan(-ev.delta.x * PAN_SCALE_X, -ev.delta.y * PAN_SCALE_Y);
           }
@@ -484,6 +514,8 @@ export function SpaceScene() {
     let fpsFrames = 0;
     let fpsDisplay = 0;
     const debugFps = isDebugQuery();
+    const debugMode = debugFps; // alias for clarity in gesture handlers
+    let debugMatrixMissCount = 0; // [DEBUG] Diagnostic 2 — counts pinchMove writes with stale matrix
     const fpsEl = debugFps ? document.createElement('div') : null;
     if (fpsEl) {
       fpsEl.className = 'fps-debug';
@@ -550,7 +582,11 @@ export function SpaceScene() {
       for (let i = 0; i < cards.length; i++) {
         const c = cards[i];
         if (held && held.card === c) {
+          // Billboard to camera; apply roll on top (same as the non-held branch and
+          // the pinchMove immediate-update path — all three must stay in sync).
           c.group.quaternion.copy(camera.quaternion);
+          const heldRoll = rollAngles.get(c);
+          if (heldRoll) c.group.rotateZ(heldRoll);
           c.group.updateMatrix();
           continue;
         }
@@ -595,16 +631,36 @@ export function SpaceScene() {
         fpsFrames += 1;
         if (fpsAccum >= 0.5) {
           fpsDisplay = Math.round(fpsFrames / fpsAccum);
-          fpsEl.textContent = `FPS ${fpsDisplay} · q=${prefs.qualityTier}`;
+          const dpr = renderer.getPixelRatio();
+          const outlineActive = outline !== null;
+          // [DEBUG] Diagnostic 4 — log FPS correlated with quality state and pass config.
+          console.info(
+            `[DEBUG][Quality] FPS=${fpsDisplay}` +
+              ` | tier=${prefs.qualityTier}` +
+              ` | DPR=${dpr.toFixed(2)}` +
+              ` | outline=${outlineActive}` +
+              ` | landmark-Hz=${landmarkRateMonitor.hz}` +
+              ` | matrix-miss=${debugMatrixMissCount}`,
+          );
+          fpsEl.textContent =
+            `FPS ${fpsDisplay} · q=${prefs.qualityTier}` +
+            ` · DPR=${dpr.toFixed(1)}` +
+            ` · lm=${landmarkRateMonitor.hz}Hz`;
           fpsAccum = 0;
           fpsFrames = 0;
 
           // Adaptive quality: step down if FPS stays low (unless user locked).
           if (!prefs.qualityLocked && fpsDisplay > 0 && fpsDisplay < 28) {
             if (prefs.qualityTier === 'high') {
+              console.info(
+                `[DEBUG][Quality] STEP-DOWN high→balanced at FPS=${fpsDisplay} DPR=${dpr.toFixed(2)}`,
+              );
               prefs.setQualityTier('balanced');
               setPixelRatioCap(1.5);
             } else if (prefs.qualityTier === 'balanced') {
+              console.info(
+                `[DEBUG][Quality] STEP-DOWN balanced→low at FPS=${fpsDisplay} DPR=${dpr.toFixed(2)}`,
+              );
               prefs.setQualityTier('low');
               setPixelRatioCap(1.25);
             }

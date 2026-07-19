@@ -1,5 +1,6 @@
 import type { HandFrame, HandLandmark } from './gestureRecognizer';
 import { preferLowPowerMedia } from './device';
+import { isDebugQuery } from './motion';
 
 /** Same-origin assets — never load WASM/models from a CDN. */
 const WASM_BASE = `${import.meta.env.BASE_URL}mediapipe/wasm`;
@@ -8,6 +9,56 @@ const MODEL_URL = `${import.meta.env.BASE_URL}mediapipe/hand_landmarker.task`;
 export type HandStartPhase = 'camera' | 'model';
 
 type FrameListener = (frame: HandFrame) => void;
+
+// ---------------------------------------------------------------------------
+// [DEBUG] Landmark inference rate monitor
+// Activated only when ?debug=1 is in the URL.
+// ---------------------------------------------------------------------------
+class LandmarkRateMonitor {
+  private enabled: boolean;
+  private count = 0;
+  private windowStart = 0;
+  /** Most recently measured inference Hz. Read by SpaceScene for the overlay. */
+  hz = 0;
+
+  constructor() {
+    this.enabled = isDebugQuery();
+  }
+
+  tick(nowMs: number): void {
+    if (!this.enabled) return;
+    if (this.windowStart === 0) {
+      this.windowStart = nowMs;
+    }
+    this.count++;
+    const elapsed = nowMs - this.windowStart;
+    if (elapsed >= 1000) {
+      this.hz = Math.round((this.count * 1000) / elapsed);
+      console.info(`[DEBUG][HandTracker] landmark-inference Hz=${this.hz}`);
+      this.count = 0;
+      this.windowStart = nowMs;
+    }
+  }
+
+  /** Log the actual video resolution that MediaPipe is receiving. */
+  logFeedResolution(video: HTMLVideoElement): void {
+    if (!this.enabled) return;
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    console.info(
+      `[DEBUG][HandTracker] camera-feed resolution fed to MediaPipe: ${vw}×${vh}` +
+        ` (readyState=${video.readyState}, lowPower=${preferLowPowerMedia()})`,
+    );
+  }
+
+  reset(): void {
+    this.count = 0;
+    this.windowStart = 0;
+    this.hz = 0;
+  }
+}
+
+export const landmarkRateMonitor = new LandmarkRateMonitor();
 
 export class HandTracker {
   private landmarker: Awaited<
@@ -20,6 +71,8 @@ export class HandTracker {
   private rafHandle: number | null = null;
   private frameSkip = 0;
   private lowPower = false;
+  /** How many consecutive rAF ticks have been skipped (for debug/5 — feed resolution check). */
+  private debugResLoggedAt = 0;
 
   /**
    * Start webcam + load MediaPipe model. Resolves once tracking is live.
@@ -75,9 +128,11 @@ export class HandTracker {
       });
     }
     this.landmarker = landmarker;
+    landmarkRateMonitor.reset();
 
     this.running = true;
     this.frameSkip = 0;
+    this.debugResLoggedAt = 0;
     this.tick();
   }
 
@@ -120,7 +175,17 @@ export class HandTracker {
     this.frameSkip = (this.frameSkip + 1) % skipRate;
 
     if (this.frameSkip === 0 && this.video.readyState >= 2) {
-      const result = this.landmarker.detectForVideo(this.video, performance.now());
+      const now = performance.now();
+
+      // [DEBUG] Diagnostic 5 — log camera feed resolution periodically so we can confirm
+      // adaptive quality stepdown does NOT change what MediaPipe actually reads.
+      // Log once at start and then every 5 s.
+      if (isDebugQuery() && now - this.debugResLoggedAt > 5000) {
+        landmarkRateMonitor.logFeedResolution(this.video);
+        this.debugResLoggedAt = now;
+      }
+
+      const result = this.landmarker.detectForVideo(this.video, now);
 
       const hands = result.landmarks.map((landmarks, i) => ({
         landmarks: landmarks.map(
@@ -130,6 +195,10 @@ export class HandTracker {
       }));
 
       const frame: HandFrame = { hands, timestamp: performance.now() };
+
+      // [DEBUG] Diagnostic 1 — track inference rate
+      landmarkRateMonitor.tick(frame.timestamp);
+
       this.listeners.forEach((l) => l(frame));
     }
     this.rafHandle = requestAnimationFrame(this.tick);

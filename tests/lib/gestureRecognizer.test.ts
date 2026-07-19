@@ -166,11 +166,18 @@ describe('GestureRecognizer — single-hand pinch state machine', () => {
     expect(events.some((e) => e.type === 'pinchEnd' && e.hand === 'Right')).toBe(true);
   });
 
-  it('emits pinchEnd when a pinching hand disappears', () => {
+  it('emits pinchEnd when a pinching hand disappears (after jitter-tolerance window)', () => {
     const r = new GestureRecognizer();
     r.process(frame([pinchedHand('Right')]));
-    const events = r.process(frame([], 16));
-    expect(events.some((e) => e.type === 'pinchEnd' && e.hand === 'Right')).toBe(true);
+    // JITTER_TOLERANCE = 4: the first 4 empty frames are suppressed to ride out normal
+    // MediaPipe detection drops. pinchEnd fires on frame 5 (first frame past tolerance).
+    // Collect all events across multiple frames and look for pinchEnd in any of them.
+    const allEvents: ReturnType<typeof r.process>[number][] = [];
+    for (let i = 1; i <= 10; i++) {
+      allEvents.push(...r.process(frame([], i * 16)));
+    }
+    expect(allEvents.some((e) => e.type === 'pinchEnd' && e.hand === 'Right')).toBe(true);
+    expect(r.hasActiveGesture).toBe(false);
   });
 
   it('tracks left and right hands independently', () => {
